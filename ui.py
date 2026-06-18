@@ -1624,6 +1624,11 @@ class TranslatorWindow(QMainWindow):
 
     def _open_log_file(self):
         sessions_dir = self._sessions_path or SESSIONS_DIR
+        preset_name = self._preset_combo.currentText()
+        if preset_name and preset_name != "-- Nenhum preset --":
+            # Sanitize preset name for folder
+            safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in preset_name).strip()
+            sessions_dir = os.path.join(sessions_dir, safe_name)
         os.makedirs(sessions_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         src = self._lang_in.currentText()[:2]
