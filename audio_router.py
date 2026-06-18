@@ -74,19 +74,21 @@ class AudioRouter:
         atexit.register(self.restore)
 
     def redirect_output_to_blackhole(self):
-        """Route system output to BlackHole 2ch only (mutes original audio)."""
+        """Route system output to capture device (mutes original audio)."""
+        from config import BLACKHOLE_2CH
         if not self._original_output:
             self._original_output = get_current_output()
-        if set_output_device("BlackHole 2ch"):
+        if set_output_device(BLACKHOLE_2CH):
             self._active = True
             return True
         return False
 
     def redirect_input_to_blackhole(self):
-        """Route system input to BlackHole 16ch (suppresses real mic)."""
+        """Route system input to virtual mic (suppresses real mic)."""
+        from config import BLACKHOLE_16CH
         if not self._original_input:
             self._original_input = get_current_input()
-        if set_input_device("BlackHole 16ch"):
+        if set_input_device(BLACKHOLE_16CH):
             self._active = True
             return True
         return False

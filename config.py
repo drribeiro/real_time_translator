@@ -14,8 +14,9 @@ ENDPOINTING_MS = int(os.getenv("ENDPOINTING_MS", "150"))
 INTERIM_SUBTITLES = os.getenv("INTERIM_SUBTITLES", "true").lower() == "true"
 
 # Device names
-BLACKHOLE_2CH = "BlackHole 2ch"
-BLACKHOLE_16CH = "BlackHole 16ch"
+# Device names (configurable — supports renamed/aggregate devices)
+BLACKHOLE_2CH = os.getenv("DEVICE_CAPTURE", "BlackHole 2ch")
+BLACKHOLE_16CH = os.getenv("DEVICE_VIRTUAL_MIC", "BlackHole 16ch")
 
 # API Keys
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
