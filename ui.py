@@ -905,6 +905,7 @@ class FloatingSubtitle(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
             | Qt.WindowType.WindowDoesNotAcceptFocus
+            | Qt.WindowType.BypassWindowManagerHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
@@ -960,6 +961,7 @@ class FloatingSubtitle(QMainWindow):
         if len(self._lines) > self.MAX_LINES:
             self._lines = self._lines[-self.MAX_LINES:]
         self._render_lines()
+        self.raise_()  # Keep on top
 
     def _render_lines(self):
         html = ""
@@ -1244,6 +1246,7 @@ class TranslatorWindow(QMainWindow):
         meters_row.addStretch()
         ps.addLayout(meters_row)
 
+        self._preset_section = preset_section
         layout.addWidget(preset_section)
 
         layout.addWidget(self._sep())
@@ -1308,6 +1311,7 @@ class TranslatorWindow(QMainWindow):
         mic_row.addStretch()
         cs.addLayout(mic_row)
 
+        self._config_section = config_section
         layout.addWidget(config_section)
 
         layout.addWidget(self._sep())
@@ -1385,6 +1389,7 @@ class TranslatorWindow(QMainWindow):
         self._speed_slider.valueChanged.connect(self._on_speed_changed)
         vs.addWidget(self._speed_slider)
 
+        self._vol_section = vol_section
         layout.addWidget(vol_section)
 
         layout.addWidget(self._sep())
@@ -1470,9 +1475,31 @@ class TranslatorWindow(QMainWindow):
         btn_row.addStretch()
         acts.addLayout(btn_row)
 
+        self._action_section = action_section
         layout.addWidget(action_section)
 
         layout.addWidget(self._sep())
+
+        # ==================== SUBTITLE HEADER ====================
+        sub_header = QHBoxLayout()
+        sub_header.setContentsMargins(20, 6, 20, 2)
+
+        sub_title = QLabel("TRANSCRICAO")
+        sub_title.setStyleSheet("color: #555; font-size: 10px; font-weight: bold; letter-spacing: 2px;")
+        sub_header.addWidget(sub_title)
+        sub_header.addStretch()
+
+        self._btn_maximize = QPushButton("Maximizar")
+        self._btn_maximize.setFixedHeight(24)
+        self._btn_maximize.setStyleSheet(
+            "QPushButton { background: #333; color: #aaa; border: 1px solid #444; "
+            "border-radius: 4px; padding: 2px 12px; font-size: 11px; }"
+            "QPushButton:hover { background: #444; color: #fff; }"
+        )
+        self._btn_maximize.clicked.connect(self._toggle_maximize_subtitle)
+        sub_header.addWidget(self._btn_maximize)
+
+        layout.addLayout(sub_header)
 
         # ==================== SUBTITLE AREA ====================
         self._subtitle_area = QTextEdit()
@@ -1798,6 +1825,26 @@ class TranslatorWindow(QMainWindow):
             self.signals.status_changed.emit(f"Preset '{name}' excluido")
 
     # ==================== UI EVENTS ====================
+
+    def _toggle_maximize_subtitle(self):
+        """Toggle between maximized subtitle view and full UI."""
+        sections = [
+            self._preset_section, self._config_section,
+            self._vol_section, self._action_section,
+        ]
+        # Check if currently maximized (sections hidden)
+        is_maximized = not self._preset_section.isVisible()
+
+        if is_maximized:
+            # Restore all sections
+            for s in sections:
+                s.show()
+            self._btn_maximize.setText("Maximizar")
+        else:
+            # Hide all sections, expand subtitle area
+            for s in sections:
+                s.hide()
+            self._btn_maximize.setText("Restaurar")
 
     def _on_subtitle_toggled(self, checked):
         """When Legenda is toggled, enable/disable Legenda Flutuante."""
