@@ -1446,10 +1446,10 @@ class TranslatorWindow(QMainWindow):
         self._btn_mic_out = ToggleSwitch("Mic Out", "#8e44ad")
         func_row.addWidget(self._btn_mic_out)
 
-        self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085")
+        self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085", checked=True)
         func_row.addWidget(self._chk_save_transcription)
 
-        self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085")
+        self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085", checked=True)
         func_row.addWidget(self._chk_save_translation)
 
         func_row.addStretch()
