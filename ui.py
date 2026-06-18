@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QTextEdit, QSlider, QComboBox, QFrame,
     QCheckBox, QInputDialog, QMessageBox, QLineEdit, QDialog,
     QFormLayout, QDialogButtonBox, QGroupBox, QSystemTrayIcon, QMenu,
+    QTabWidget, QFileDialog, QListWidget, QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QAction
@@ -41,114 +42,47 @@ class PipelineSignals(QObject):
 
 
 class SettingsDialog(QDialog):
-    """Dialog for API keys and TTS engine configuration."""
+    """Full settings dialog with tabs: API Keys, Voice, Storage, Presets."""
 
-    def __init__(self, parent=None):
+    DIALOG_STYLE = """
+        QDialog { background: #1e1e24; color: #ddd; }
+        QTabWidget::pane { border: 1px solid #444; background: #1e1e24; }
+        QTabBar::tab { background: #2a2a2e; color: #aaa; padding: 8px 16px; border: 1px solid #444; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }
+        QTabBar::tab:selected { background: #1e1e24; color: #fff; }
+        QGroupBox { border: 1px solid #444; border-radius: 6px; margin-top: 10px; padding-top: 14px; color: #ccc; font-weight: bold; }
+        QGroupBox::title { subcontrol-origin: margin; left: 10px; }
+        QLabel { color: #aaa; font-size: 12px; }
+        QLineEdit { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 6px; font-size: 12px; }
+        QPushButton { background: #2d8cf0; color: white; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; }
+        QPushButton:hover { background: #3a9df5; }
+        QComboBox { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+        QComboBox::drop-down { border: none; }
+        QComboBox QAbstractItemView { background: #333; color: #ddd; selection-background-color: #555; }
+        QListWidget { background: #2a2a2e; color: #ddd; border: 1px solid #444; border-radius: 4px; font-size: 12px; }
+        QListWidget::item { padding: 6px; }
+        QListWidget::item:selected { background: #2d8cf0; }
+    """
+
+    def __init__(self, parent=None, presets=None):
         super().__init__(parent)
+        self._presets = presets if presets is not None else {}
+        self._presets_changed = False
+
         self.setWindowTitle("Configuracoes")
-        self.setFixedWidth(520)
-        self.setStyleSheet("""
-            QDialog { background: #1e1e24; color: #ddd; }
-            QGroupBox { border: 1px solid #444; border-radius: 6px; margin-top: 10px; padding-top: 14px; color: #ccc; font-weight: bold; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; }
-            QLabel { color: #aaa; font-size: 12px; }
-            QLineEdit { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 6px; font-size: 12px; }
-            QPushButton { background: #2d8cf0; color: white; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; }
-            QPushButton:hover { background: #3a9df5; }
-            QComboBox { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
-            QComboBox::drop-down { border: none; }
-        """)
+        self.setFixedSize(580, 480)
+        self.setStyleSheet(self.DIALOG_STYLE)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
 
-        # --- API Keys ---
-        keys_group = QGroupBox("API Keys")
-        keys_layout = QFormLayout()
+        self._tabs = QTabWidget()
+        self._tabs.addTab(self._build_keys_tab(), "API Keys")
+        self._tabs.addTab(self._build_voice_tab(), "Voz")
+        self._tabs.addTab(self._build_storage_tab(), "Armazenamento")
+        self._tabs.addTab(self._build_presets_tab(), "Presets")
+        layout.addWidget(self._tabs)
 
-        # Deepgram
-        self._deepgram_key = QLineEdit()
-        self._deepgram_key.setPlaceholderText("Cole sua chave aqui")
-        self._deepgram_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._deepgram_key.setText(os.getenv("DEEPGRAM_API_KEY", ""))
-        dg_row = QHBoxLayout()
-        dg_row.addWidget(self._deepgram_key)
-        dg_link = QPushButton("Criar conta")
-        dg_link.setFixedWidth(90)
-        dg_link.clicked.connect(lambda: self._open_url("https://console.deepgram.com/signup"))
-        dg_row.addWidget(dg_link)
-        dg_show = QPushButton("Mostrar")
-        dg_show.setFixedWidth(65)
-        dg_show.clicked.connect(lambda: self._toggle_visibility(self._deepgram_key, dg_show))
-        dg_row.addWidget(dg_show)
-        dg_widget = QWidget()
-        dg_widget.setLayout(dg_row)
-        keys_layout.addRow("Deepgram (STT):", dg_widget)
-
-        # DeepL
-        self._deepl_key = QLineEdit()
-        self._deepl_key.setPlaceholderText("Cole sua chave aqui")
-        self._deepl_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._deepl_key.setText(os.getenv("DEEPL_API_KEY", ""))
-        dl_row = QHBoxLayout()
-        dl_row.addWidget(self._deepl_key)
-        dl_link = QPushButton("Criar conta")
-        dl_link.setFixedWidth(90)
-        dl_link.clicked.connect(lambda: self._open_url("https://www.deepl.com/pro-api"))
-        dl_row.addWidget(dl_link)
-        dl_show = QPushButton("Mostrar")
-        dl_show.setFixedWidth(65)
-        dl_show.clicked.connect(lambda: self._toggle_visibility(self._deepl_key, dl_show))
-        dl_row.addWidget(dl_show)
-        dl_widget = QWidget()
-        dl_widget.setLayout(dl_row)
-        keys_layout.addRow("DeepL (Traducao):", dl_widget)
-
-        # OpenAI
-        self._openai_key = QLineEdit()
-        self._openai_key.setPlaceholderText("Cole sua chave aqui (opcional)")
-        self._openai_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._openai_key.setText(os.getenv("OPENAI_API_KEY", ""))
-        oa_row = QHBoxLayout()
-        oa_row.addWidget(self._openai_key)
-        oa_link = QPushButton("Criar conta")
-        oa_link.setFixedWidth(90)
-        oa_link.clicked.connect(lambda: self._open_url("https://platform.openai.com/signup"))
-        oa_row.addWidget(oa_link)
-        oa_show = QPushButton("Mostrar")
-        oa_show.setFixedWidth(65)
-        oa_show.clicked.connect(lambda: self._toggle_visibility(self._openai_key, oa_show))
-        oa_row.addWidget(oa_show)
-        oa_widget = QWidget()
-        oa_widget.setLayout(oa_row)
-        keys_layout.addRow("OpenAI (TTS):", oa_widget)
-
-        keys_group.setLayout(keys_layout)
-        layout.addWidget(keys_group)
-
-        # --- TTS Engine ---
-        tts_group = QGroupBox("Motor de Voz (TTS)")
-        tts_layout = QFormLayout()
-
-        self._tts_engine = QComboBox()
-        self._tts_engine.addItems(["macOS (say) — Gratis", "OpenAI TTS — Melhor qualidade"])
-        self._tts_engine.currentIndexChanged.connect(self._on_engine_changed)
-        tts_layout.addRow("Engine:", self._tts_engine)
-
-        self._openai_voice_combo = QComboBox()
-        self._openai_voice_combo.addItems(OPENAI_VOICES)
-        self._openai_voice_combo.setCurrentText("nova")
-        self._openai_voice_combo.setEnabled(False)
-        tts_layout.addRow("Voz OpenAI:", self._openai_voice_combo)
-
-        # Test button
-        self._test_btn = QPushButton("Testar voz")
-        self._test_btn.clicked.connect(self._test_voice)
-        tts_layout.addRow("", self._test_btn)
-
-        tts_group.setLayout(tts_layout)
-        layout.addWidget(tts_group)
-
-        # --- Buttons ---
+        # Save / Cancel
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -156,17 +90,279 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        # Load saved engine preference
+    # ==================== TAB: API KEYS ====================
+
+    def _build_keys_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Helper to create a key row
+        def key_row(placeholder, env_var, signup_url):
+            key_input = QLineEdit()
+            key_input.setPlaceholderText(placeholder)
+            key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            key_input.setText(os.getenv(env_var, ""))
+
+            row = QHBoxLayout()
+            row.addWidget(key_input)
+
+            show_btn = QPushButton("Mostrar")
+            show_btn.setFixedWidth(65)
+            show_btn.clicked.connect(lambda: self._toggle_vis(key_input, show_btn))
+            row.addWidget(show_btn)
+
+            link_btn = QPushButton("Criar conta")
+            link_btn.setFixedWidth(85)
+            link_btn.clicked.connect(lambda: subprocess.Popen(["open", signup_url]))
+            row.addWidget(link_btn)
+
+            w = QWidget()
+            w.setLayout(row)
+            return key_input, w
+
+        form = QFormLayout()
+
+        self._deepgram_key, dg_w = key_row(
+            "Cole sua chave Deepgram", "DEEPGRAM_API_KEY",
+            "https://console.deepgram.com/signup")
+        form.addRow("Deepgram (STT):", dg_w)
+
+        info_dg = QLabel("Speech-to-Text em tempo real. Free: $200 credito (~550h)")
+        info_dg.setStyleSheet("color: #666; font-size: 10px;")
+        form.addRow("", info_dg)
+
+        self._deepl_key, dl_w = key_row(
+            "Cole sua chave DeepL", "DEEPL_API_KEY",
+            "https://www.deepl.com/pro-api")
+        form.addRow("DeepL (Traducao):", dl_w)
+
+        info_dl = QLabel("Traducao de texto. Free: 500k chars/mes")
+        info_dl.setStyleSheet("color: #666; font-size: 10px;")
+        form.addRow("", info_dl)
+
+        self._openai_key, oa_w = key_row(
+            "Cole sua chave OpenAI (opcional)", "OPENAI_API_KEY",
+            "https://platform.openai.com/signup")
+        form.addRow("OpenAI (TTS):", oa_w)
+
+        info_oa = QLabel("Text-to-Speech premium. Opcional — macOS say e gratis")
+        info_oa.setStyleSheet("color: #666; font-size: 10px;")
+        form.addRow("", info_oa)
+
+        layout.addLayout(form)
+        layout.addStretch()
+        return tab
+
+    # ==================== TAB: VOICE ====================
+
+    def _build_voice_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Engine selection
+        engine_group = QGroupBox("Motor de Voz")
+        eg_layout = QFormLayout()
+
+        self._tts_engine = QComboBox()
+        self._tts_engine.addItems(["macOS (say) — Gratis", "OpenAI TTS — Melhor qualidade"])
+        self._tts_engine.currentIndexChanged.connect(self._on_engine_changed)
+        eg_layout.addRow("Engine:", self._tts_engine)
+
+        info_engine = QLabel("macOS say: gratis, qualidade razoavel | OpenAI: pago, qualidade excelente")
+        info_engine.setStyleSheet("color: #666; font-size: 10px;")
+        info_engine.setWordWrap(True)
+        eg_layout.addRow("", info_engine)
+
+        engine_group.setLayout(eg_layout)
+        layout.addWidget(engine_group)
+
+        # OpenAI options
+        self._openai_group = QGroupBox("Opcoes OpenAI TTS")
+        og_layout = QFormLayout()
+
+        self._openai_voice_combo = QComboBox()
+        self._openai_voice_combo.addItems(OPENAI_VOICES)
+        og_layout.addRow("Voz:", self._openai_voice_combo)
+
+        voice_info = QLabel("alloy: neutra | echo: grave | fable: expressiva | nova: feminina | onyx: masculina | shimmer: suave")
+        voice_info.setStyleSheet("color: #666; font-size: 10px;")
+        voice_info.setWordWrap(True)
+        og_layout.addRow("", voice_info)
+
+        self._openai_group.setLayout(og_layout)
+        layout.addWidget(self._openai_group)
+
+        # Test button
+        test_row = QHBoxLayout()
+        self._test_btn = QPushButton("Testar voz")
+        self._test_btn.clicked.connect(self._test_voice)
+        test_row.addWidget(self._test_btn)
+        test_row.addStretch()
+        layout.addLayout(test_row)
+
+        layout.addStretch()
+
+        # Load saved
         saved_engine = os.getenv("TTS_ENGINE", "macos")
         if saved_engine == "openai":
             self._tts_engine.setCurrentIndex(1)
-        saved_voice = os.getenv("OPENAI_VOICE", "nova")
-        self._openai_voice_combo.setCurrentText(saved_voice)
+        else:
+            self._openai_group.setEnabled(False)
+        self._openai_voice_combo.setCurrentText(os.getenv("OPENAI_VOICE", "nova"))
 
-    def _open_url(self, url):
-        subprocess.Popen(["open", url])
+        return tab
 
-    def _toggle_visibility(self, line_edit, btn):
+    # ==================== TAB: STORAGE ====================
+
+    def _build_storage_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Sessions path
+        path_group = QGroupBox("Pasta de Sessoes")
+        pg_layout = QVBoxLayout()
+
+        info = QLabel("Transcricoes e traducoes sao salvas como arquivos .txt nesta pasta:")
+        info.setWordWrap(True)
+        pg_layout.addWidget(info)
+
+        path_row = QHBoxLayout()
+        self._sessions_path = QLineEdit()
+        self._sessions_path.setText(os.getenv("SESSIONS_PATH", SESSIONS_DIR))
+        path_row.addWidget(self._sessions_path)
+
+        browse_btn = QPushButton("Procurar")
+        browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self._browse_sessions_path)
+        path_row.addWidget(browse_btn)
+
+        open_btn = QPushButton("Abrir")
+        open_btn.setFixedWidth(60)
+        open_btn.clicked.connect(lambda: subprocess.Popen(["open", self._sessions_path.text()]))
+        path_row.addWidget(open_btn)
+
+        pg_layout.addLayout(path_row)
+
+        # Format info
+        fmt_info = QLabel("Formato: YYYY-MM-DD_HH-MM-SS_IN-OUT.txt")
+        fmt_info.setStyleSheet("color: #666; font-size: 10px;")
+        pg_layout.addWidget(fmt_info)
+
+        path_group.setLayout(pg_layout)
+        layout.addWidget(path_group)
+
+        layout.addStretch()
+        return tab
+
+    # ==================== TAB: PRESETS ====================
+
+    def _build_presets_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        info = QLabel("Gerencie seus presets de configuracao. Presets salvam: idiomas, modos, volumes, velocidade.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        # List
+        self._preset_list = QListWidget()
+        self._refresh_preset_list()
+        layout.addWidget(self._preset_list)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+
+        rename_btn = QPushButton("Renomear")
+        rename_btn.clicked.connect(self._rename_preset)
+        btn_row.addWidget(rename_btn)
+
+        dup_btn = QPushButton("Duplicar")
+        dup_btn.clicked.connect(self._duplicate_preset)
+        btn_row.addWidget(dup_btn)
+
+        del_btn = QPushButton("Excluir")
+        del_btn.setStyleSheet("QPushButton { background: #c0392b; } QPushButton:hover { background: #e74c3c; }")
+        del_btn.clicked.connect(self._delete_preset)
+        btn_row.addWidget(del_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        # Detail view
+        self._preset_detail = QTextEdit()
+        self._preset_detail.setReadOnly(True)
+        self._preset_detail.setMaximumHeight(120)
+        self._preset_detail.setStyleSheet("background: #2a2a2e; color: #aaa; border: 1px solid #444; border-radius: 4px; font-size: 11px;")
+        layout.addWidget(self._preset_detail)
+
+        self._preset_list.currentRowChanged.connect(self._on_preset_detail)
+
+        return tab
+
+    def _refresh_preset_list(self):
+        self._preset_list.clear()
+        for name in self._presets:
+            self._preset_list.addItem(name)
+
+    def _on_preset_detail(self, row):
+        if row < 0:
+            self._preset_detail.clear()
+            return
+        name = self._preset_list.item(row).text()
+        cfg = self._presets.get(name, {})
+        lines = []
+        lines.append(f"Idioma IN: {cfg.get('lang_in', '?')}")
+        lines.append(f"Idioma OUT: {cfg.get('lang_out', '?')}")
+        modes = []
+        if cfg.get("subtitle"): modes.append("Legenda")
+        if cfg.get("audio_in"): modes.append("Audio In")
+        if cfg.get("mic_out"): modes.append("Mic Out")
+        lines.append(f"Modos: {', '.join(modes) if modes else 'Nenhum'}")
+        lines.append(f"Vol Original: {cfg.get('original_vol', '?')}%")
+        lines.append(f"Vol Traducao: {cfg.get('tts_vol', '?')}%")
+        lines.append(f"Velocidade: {cfg.get('tts_speed', '?')}")
+        lines.append(f"Mic: {cfg.get('mic', '?')}")
+        self._preset_detail.setText("\n".join(lines))
+
+    def _rename_preset(self):
+        item = self._preset_list.currentItem()
+        if not item:
+            return
+        old_name = item.text()
+        new_name, ok = QInputDialog.getText(self, "Renomear Preset", "Novo nome:", text=old_name)
+        if ok and new_name.strip() and new_name.strip() != old_name:
+            self._presets[new_name.strip()] = self._presets.pop(old_name)
+            self._presets_changed = True
+            self._refresh_preset_list()
+
+    def _duplicate_preset(self):
+        item = self._preset_list.currentItem()
+        if not item:
+            return
+        name = item.text()
+        new_name = f"{name} (copia)"
+        self._presets[new_name] = dict(self._presets[name])
+        self._presets_changed = True
+        self._refresh_preset_list()
+
+    def _delete_preset(self):
+        item = self._preset_list.currentItem()
+        if not item:
+            return
+        name = item.text()
+        reply = QMessageBox.question(
+            self, "Excluir Preset", f"Excluir '{name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            del self._presets[name]
+            self._presets_changed = True
+            self._refresh_preset_list()
+            self._preset_detail.clear()
+
+    # ==================== SHARED HELPERS ====================
+
+    def _toggle_vis(self, line_edit, btn):
         if line_edit.echoMode() == QLineEdit.EchoMode.Password:
             line_edit.setEchoMode(QLineEdit.EchoMode.Normal)
             btn.setText("Ocultar")
@@ -175,15 +371,20 @@ class SettingsDialog(QDialog):
             btn.setText("Mostrar")
 
     def _on_engine_changed(self, index):
-        is_openai = index == 1
-        self._openai_voice_combo.setEnabled(is_openai)
+        self._openai_group.setEnabled(index == 1)
+
+    def _browse_sessions_path(self):
+        path = QFileDialog.getExistingDirectory(self, "Selecionar pasta de sessoes",
+                                                 self._sessions_path.text())
+        if path:
+            self._sessions_path.setText(path)
 
     def _test_voice(self):
         engine = "openai" if self._tts_engine.currentIndex() == 1 else "macos"
         api_key = self._openai_key.text().strip()
 
         if engine == "openai" and not api_key:
-            QMessageBox.warning(self, "Aviso", "Insira a chave da OpenAI para testar.")
+            QMessageBox.warning(self, "Aviso", "Insira a chave da OpenAI na aba API Keys.")
             return
 
         self._test_btn.setText("Testando...")
@@ -196,24 +397,29 @@ class SettingsDialog(QDialog):
                     openai_api_key=api_key,
                     openai_voice=self._openai_voice_combo.currentText(),
                 )
-                tts.speak("Olá, este é um teste de voz do tradutor em tempo real.")
-            except Exception as e:
+                tts.speak("Ola, este e um teste de voz do tradutor em tempo real.")
+            except Exception:
                 pass
             self._test_btn.setText("Testar voz")
             self._test_btn.setEnabled(True)
 
-        import threading
         threading.Thread(target=test, daemon=True).start()
 
+    # ==================== SAVE ====================
+
     def _save_and_accept(self):
-        # Save to .env
+        # Save API keys
         set_key(ENV_FILE, "DEEPGRAM_API_KEY", self._deepgram_key.text().strip())
         set_key(ENV_FILE, "DEEPL_API_KEY", self._deepl_key.text().strip())
         set_key(ENV_FILE, "OPENAI_API_KEY", self._openai_key.text().strip())
 
+        # Save voice
         engine = "openai" if self._tts_engine.currentIndex() == 1 else "macos"
         set_key(ENV_FILE, "TTS_ENGINE", engine)
         set_key(ENV_FILE, "OPENAI_VOICE", self._openai_voice_combo.currentText())
+
+        # Save storage path
+        set_key(ENV_FILE, "SESSIONS_PATH", self._sessions_path.text().strip())
 
         # Reload env
         load_dotenv(ENV_FILE, override=True)
@@ -224,13 +430,25 @@ class SettingsDialog(QDialog):
         config.DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
         config.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+        # Save presets if changed
+        if self._presets_changed:
+            save_presets(self._presets)
+
         self.accept()
+
+    # ==================== GETTERS ====================
 
     def get_tts_engine(self) -> str:
         return "openai" if self._tts_engine.currentIndex() == 1 else "macos"
 
     def get_openai_voice(self) -> str:
         return self._openai_voice_combo.currentText()
+
+    def get_sessions_path(self) -> str:
+        return self._sessions_path.text().strip()
+
+    def get_presets(self) -> dict:
+        return self._presets
 
 
 class FloatingSubtitle(QMainWindow):
@@ -352,6 +570,7 @@ class TranslatorWindow(QMainWindow):
 
         # Presets
         self._presets = load_presets()
+        self._sessions_path = os.getenv("SESSIONS_PATH", SESSIONS_DIR)
 
         self._detect_output_device()
         self._setup_ui()
@@ -865,10 +1084,17 @@ class TranslatorWindow(QMainWindow):
             self._chk_save_translation.setChecked(config["save_translation"])
 
     def _open_settings(self):
-        dialog = SettingsDialog(self)
+        dialog = SettingsDialog(self, presets=self._presets)
         if dialog.exec():
             self._tts_engine = dialog.get_tts_engine()
             self._openai_voice = dialog.get_openai_voice()
+            self._sessions_path = dialog.get_sessions_path()
+
+            # Update presets (may have been renamed/deleted)
+            self._presets = dialog.get_presets()
+            self._refresh_preset_combo()
+            self._rebuild_tray_menu()
+
             self.signals.status_changed.emit("Configuracoes salvas")
 
     def _on_preset_selected(self, index):
@@ -877,6 +1103,15 @@ class TranslatorWindow(QMainWindow):
         name = self._preset_combo.currentText()
         if name in self._presets:
             self._apply_config(self._presets[name])
+
+    def _refresh_preset_combo(self):
+        """Rebuild the preset dropdown from current presets dict."""
+        self._preset_combo.blockSignals(True)
+        self._preset_combo.clear()
+        self._preset_combo.addItem("-- Selecionar --")
+        for name in self._presets:
+            self._preset_combo.addItem(name)
+        self._preset_combo.blockSignals(False)
 
     def _save_preset(self):
         name, ok = QInputDialog.getText(self, "Salvar Preset", "Nome do preset:")
@@ -1047,12 +1282,13 @@ class TranslatorWindow(QMainWindow):
     # ==================== LOGGING ====================
 
     def _open_log_file(self):
-        os.makedirs(SESSIONS_DIR, exist_ok=True)
+        sessions_dir = self._sessions_path or SESSIONS_DIR
+        os.makedirs(sessions_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         src = self._lang_in.currentText()[:2]
         tgt = self._lang_out.currentText()[:2]
         filename = f"{ts}_{src}-{tgt}.txt"
-        path = os.path.join(SESSIONS_DIR, filename)
+        path = os.path.join(sessions_dir, filename)
         self._log_file = open(path, "w", encoding="utf-8")
         self._log_file.write(f"# RealtimeTranslator Session\n")
         self._log_file.write(f"# {datetime.now().isoformat()}\n")
