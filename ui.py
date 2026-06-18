@@ -1834,6 +1834,13 @@ class TranslatorWindow(QMainWindow):
         show_action = menu.addAction("Mostrar janela")
         show_action.triggered.connect(self._show_window)
 
+        # Floating subtitle toggle
+        if self._floating_sub.isVisible():
+            sub_action = menu.addAction("Ocultar legenda flutuante")
+        else:
+            sub_action = menu.addAction("Mostrar legenda flutuante")
+        sub_action.triggered.connect(self._toggle_floating_subtitle)
+
         menu.addSeparator()
 
         # Status
@@ -1881,6 +1888,13 @@ class TranslatorWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def _toggle_floating_subtitle(self):
+        if self._floating_sub.isVisible():
+            self._floating_sub.hide()
+        else:
+            self._floating_sub.show()
+        self._rebuild_tray_menu()
 
     def _activate_preset_from_tray(self, preset_name):
         """Load a preset and start from tray menu."""
