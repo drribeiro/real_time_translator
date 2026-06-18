@@ -28,6 +28,7 @@ from audio_router import AudioRouter, get_current_output
 from transcriber import RealtimeTranscriber
 from translator import TextTranslator
 from tts import TextToSpeech, OPENAI_VOICES
+from app_logger import get_logger, setup_logger
 from dotenv import load_dotenv, set_key
 
 PRESETS_FILE = os.path.join(os.path.dirname(__file__), "presets.json")
@@ -220,7 +221,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(tab)
 
         # Sessions path
-        path_group = QGroupBox("Pasta de Sessoes")
+        path_group = QGroupBox("Pasta de Transcricoes")
         pg_layout = QVBoxLayout()
 
         info = QLabel("Transcricoes e traducoes sao salvas como arquivos .txt nesta pasta:")
@@ -228,29 +229,62 @@ class SettingsDialog(QDialog):
         pg_layout.addWidget(info)
 
         path_row = QHBoxLayout()
-        self._sessions_path = QLineEdit()
-        self._sessions_path.setText(os.getenv("SESSIONS_PATH", SESSIONS_DIR))
-        path_row.addWidget(self._sessions_path)
+        self._sessions_path_input = QLineEdit()
+        self._sessions_path_input.setText(os.getenv("SESSIONS_PATH", SESSIONS_DIR))
+        path_row.addWidget(self._sessions_path_input)
 
         browse_btn = QPushButton("Procurar")
         browse_btn.setFixedWidth(80)
-        browse_btn.clicked.connect(self._browse_sessions_path)
+        browse_btn.clicked.connect(lambda: self._browse_path(self._sessions_path_input))
         path_row.addWidget(browse_btn)
 
         open_btn = QPushButton("Abrir")
         open_btn.setFixedWidth(60)
-        open_btn.clicked.connect(lambda: subprocess.Popen(["open", self._sessions_path.text()]))
+        open_btn.clicked.connect(lambda: subprocess.Popen(["open", self._sessions_path_input.text()]))
         path_row.addWidget(open_btn)
 
         pg_layout.addLayout(path_row)
 
-        # Format info
         fmt_info = QLabel("Formato: YYYY-MM-DD_HH-MM-SS_IN-OUT.txt")
         fmt_info.setStyleSheet("color: #666; font-size: 10px;")
         pg_layout.addWidget(fmt_info)
 
         path_group.setLayout(pg_layout)
         layout.addWidget(path_group)
+
+        # Logs path
+        logs_group = QGroupBox("Pasta de Logs (debug)")
+        lg_layout = QVBoxLayout()
+
+        logs_info = QLabel("Logs de execucao do app (erros, conexoes, eventos). Util para debug:")
+        logs_info.setWordWrap(True)
+        lg_layout.addWidget(logs_info)
+
+        logs_row = QHBoxLayout()
+        default_logs = os.getenv("LOGS_PATH", os.path.join(os.path.dirname(__file__), "logs"))
+        self._logs_path_input = QLineEdit()
+        self._logs_path_input.setText(default_logs)
+        logs_row.addWidget(self._logs_path_input)
+
+        logs_browse = QPushButton("Procurar")
+        logs_browse.setFixedWidth(80)
+        logs_browse.clicked.connect(lambda: self._browse_path(self._logs_path_input))
+        logs_row.addWidget(logs_browse)
+
+        logs_open = QPushButton("Abrir")
+        logs_open.setFixedWidth(60)
+        logs_open.clicked.connect(lambda: subprocess.Popen(["open", self._logs_path_input.text()]))
+        logs_row.addWidget(logs_open)
+
+        lg_layout.addLayout(logs_row)
+
+        self._enable_logs = QCheckBox("Ativar logs de debug")
+        self._enable_logs.setChecked(os.getenv("ENABLE_LOGS", "false").lower() == "true")
+        self._enable_logs.setStyleSheet("color: #aaa; font-size: 12px;")
+        lg_layout.addWidget(self._enable_logs)
+
+        logs_group.setLayout(lg_layout)
+        layout.addWidget(logs_group)
 
         layout.addStretch()
         return tab
@@ -374,11 +408,10 @@ class SettingsDialog(QDialog):
     def _on_engine_changed(self, index):
         self._openai_group.setEnabled(index == 1)
 
-    def _browse_sessions_path(self):
-        path = QFileDialog.getExistingDirectory(self, "Selecionar pasta de sessoes",
-                                                 self._sessions_path.text())
+    def _browse_path(self, line_edit):
+        path = QFileDialog.getExistingDirectory(self, "Selecionar pasta", line_edit.text())
         if path:
-            self._sessions_path.setText(path)
+            line_edit.setText(path)
 
     def _test_voice(self):
         engine = "openai" if self._tts_engine.currentIndex() == 1 else "macos"
@@ -419,8 +452,10 @@ class SettingsDialog(QDialog):
         set_key(ENV_FILE, "TTS_ENGINE", engine)
         set_key(ENV_FILE, "OPENAI_VOICE", self._openai_voice_combo.currentText())
 
-        # Save storage path
-        set_key(ENV_FILE, "SESSIONS_PATH", self._sessions_path.text().strip())
+        # Save storage paths
+        set_key(ENV_FILE, "SESSIONS_PATH", self._sessions_path_input.text().strip())
+        set_key(ENV_FILE, "LOGS_PATH", self._logs_path_input.text().strip())
+        set_key(ENV_FILE, "ENABLE_LOGS", "true" if self._enable_logs.isChecked() else "false")
 
         # Reload env
         load_dotenv(ENV_FILE, override=True)
@@ -446,7 +481,13 @@ class SettingsDialog(QDialog):
         return self._openai_voice_combo.currentText()
 
     def get_sessions_path(self) -> str:
-        return self._sessions_path.text().strip()
+        return self._sessions_path_input.text().strip()
+
+    def get_logs_path(self) -> str:
+        return self._logs_path_input.text().strip()
+
+    def get_enable_logs(self) -> bool:
+        return self._enable_logs.isChecked()
 
     def get_presets(self) -> dict:
         return self._presets
@@ -1025,10 +1066,12 @@ class TranslatorWindow(QMainWindow):
     def _set_status(self, text):
         self._status_label.setText(text)
         self._status_label.setStyleSheet("color: #888; font-size: 11px;")
+        get_logger().info(text)
 
     def _set_error(self, text):
         self._status_label.setText(f"ERRO: {text}")
         self._status_label.setStyleSheet("color: #ff5555; font-size: 11px;")
+        get_logger().error(text)
 
     # ==================== DRAGGING ====================
 
@@ -1092,6 +1135,10 @@ class TranslatorWindow(QMainWindow):
             self._tts_engine = dialog.get_tts_engine()
             self._openai_voice = dialog.get_openai_voice()
             self._sessions_path = dialog.get_sessions_path()
+
+            # Setup logger
+            from app_logger import setup_logger
+            setup_logger(dialog.get_logs_path(), dialog.get_enable_logs())
 
             # Update presets (may have been renamed/deleted)
             self._presets = dialog.get_presets()
@@ -1329,6 +1376,8 @@ class TranslatorWindow(QMainWindow):
     # ==================== PIPELINE ====================
 
     def _start_pipeline(self):
+        log = get_logger()
+        log.info("Pipeline starting...")
         self._set_dot("#ffcc00")
         self.signals.status_changed.emit("Conectando...")
 
@@ -1656,6 +1705,13 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("RealtimeTranslator")
     app.setQuitOnLastWindowClosed(False)  # Keep running in tray
+
+    # Init logger from saved settings
+    setup_logger(
+        os.getenv("LOGS_PATH", os.path.join(os.path.dirname(__file__), "logs")),
+        os.getenv("ENABLE_LOGS", "false").lower() == "true",
+    )
+    get_logger().info("App started")
 
     window = TranslatorWindow()
     window.setup_tray()
