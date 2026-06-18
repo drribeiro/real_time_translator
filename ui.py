@@ -1526,11 +1526,6 @@ class TranslatorWindow(QMainWindow):
             "QPushButton:hover { background: #444; color: #fff; }"
         )
 
-        self._btn_swap_cols = QPushButton("Trocar lados")
-        self._btn_swap_cols.setFixedHeight(24)
-        self._btn_swap_cols.setStyleSheet(header_btn_style)
-        self._btn_swap_cols.clicked.connect(self._swap_columns)
-        sub_header.addWidget(self._btn_swap_cols)
 
         self._btn_maximize = QPushButton("Maximizar")
         self._btn_maximize.setFixedHeight(24)
@@ -1540,63 +1535,19 @@ class TranslatorWindow(QMainWindow):
 
         layout.addLayout(sub_header)
 
-        # ==================== SPLIT SUBTITLE AREA ====================
-        split_w = QWidget()
-        split_layout = QHBoxLayout(split_w)
-        split_layout.setContentsMargins(0, 0, 0, 0)
-        split_layout.setSpacing(2)
+        # ==================== UNIFIED SUBTITLE AREA ====================
+        self._subtitle_area = QTextEdit()
+        self._subtitle_area.setReadOnly(True)
+        self._subtitle_area.setObjectName("subtitleArea")
+        self._subtitle_area.setFont(QFont("SF Pro", 13))
+        self._subtitle_area.setMinimumHeight(150)
+        layout.addWidget(self._subtitle_area)
 
-        # Left: original language
-        left_w = QWidget()
-        left_l = QVBoxLayout(left_w)
-        left_l.setContentsMargins(0, 0, 0, 0)
-        left_l.setSpacing(0)
-
+        # Hidden headers for compatibility
         self._left_header = QLabel("ORIGINAL")
-        self._left_header.setFixedHeight(24)
-        self._left_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._left_header.setStyleSheet("background: #1a1a20; color: #666; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        left_l.addWidget(self._left_header)
-
-        self._subtitle_left = QTextEdit()
-        self._subtitle_left.setReadOnly(True)
-        self._subtitle_left.setObjectName("subtitleArea")
-        self._subtitle_left.setFont(QFont("SF Pro", 13))
-        left_l.addWidget(self._subtitle_left)
-
-        split_layout.addWidget(left_w)
-
-        # Divider
-        divider = QFrame()
-        divider.setFrameShape(QFrame.Shape.VLine)
-        divider.setStyleSheet("color: #333;")
-        split_layout.addWidget(divider)
-
-        # Right: translated language
-        right_w = QWidget()
-        right_l = QVBoxLayout(right_w)
-        right_l.setContentsMargins(0, 0, 0, 0)
-        right_l.setSpacing(0)
-
         self._right_header = QLabel("TRADUCAO")
-        self._right_header.setFixedHeight(24)
-        self._right_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._right_header.setStyleSheet("background: #1a1a20; color: #2d8cf0; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        right_l.addWidget(self._right_header)
-
-        self._subtitle_right = QTextEdit()
-        self._subtitle_right.setReadOnly(True)
-        self._subtitle_right.setObjectName("subtitleArea")
-        self._subtitle_right.setFont(QFont("SF Pro", 13))
-        right_l.addWidget(self._subtitle_right)
-
-        split_layout.addWidget(right_w)
-
-        # Keep reference for old code compatibility
-        self._subtitle_area = self._subtitle_left
-
-        split_w.setMinimumHeight(150)
-        layout.addWidget(split_w)
+        self._subtitle_left = self._subtitle_area
+        self._subtitle_right = self._subtitle_area
 
         # ==================== STATUS BAR ====================
         sb_w = QWidget()
@@ -1729,6 +1680,7 @@ class TranslatorWindow(QMainWindow):
     def _add_subtitle(self, original, translated, source="AUDIO"):
         src = self._lang_in.currentText()[:2].upper()
         tgt = self._lang_out.currentText()[:2].upper()
+        ts = datetime.now().strftime("%H:%M:%S")
 
         # Speaker color
         speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
@@ -1741,27 +1693,23 @@ class TranslatorWindow(QMainWindow):
             speaker_html = f'<span style="color: {color}; font-weight: bold;">[{source}]</span> '
         elif source == "MIC":
             speaker_html = '<span style="color: #e07c3a; font-weight: bold;">[MIC]</span> '
-            color = "#e07c3a"
         else:
             speaker_html = ""
-            color = "#ccc"
 
-        # Left: original
-        self._subtitle_left.append(
-            f'{speaker_html}<span style="color: #ddd; font-size: 13px;">{original}</span>'
+        # Translated (bold, bright, larger)
+        self._subtitle_area.append(
+            f'{speaker_html}'
+            f'<span style="color: #fff; font-size: 15px; font-weight: bold;">{translated}</span>'
         )
-        self._subtitle_left.append("")
-
-        # Right: translated
-        self._subtitle_right.append(
-            f'{speaker_html}<span style="color: #fff; font-size: 13px; font-weight: bold;">{translated}</span>'
+        # Original (smaller, dimmer, below)
+        self._subtitle_area.append(
+            f'<span style="color: #666; font-size: 11px;">{ts}  [{src}] {original}</span>'
         )
-        self._subtitle_right.append("")
+        self._subtitle_area.append("")
 
-        # Auto-scroll both
-        for area in (self._subtitle_left, self._subtitle_right):
-            bar = area.verticalScrollBar()
-            bar.setValue(bar.maximum())
+        # Auto-scroll
+        bar = self._subtitle_area.verticalScrollBar()
+        bar.setValue(bar.maximum())
 
         # Clear interim indicator
         self._interim_label.setText("")
@@ -1941,28 +1889,6 @@ class TranslatorWindow(QMainWindow):
 
     # ==================== UI EVENTS ====================
 
-    def _swap_columns(self):
-        """Swap left and right transcript columns."""
-        split = self._subtitle_left.parent().parent().layout()
-        # Swap the widgets by removing and re-inserting
-        left_w = split.itemAt(0).widget()
-        divider = split.itemAt(1).widget()
-        right_w = split.itemAt(2).widget()
-
-        split.removeWidget(left_w)
-        split.removeWidget(divider)
-        split.removeWidget(right_w)
-
-        split.addWidget(right_w)
-        split.addWidget(divider)
-        split.addWidget(left_w)
-
-        # Swap headers
-        left_text = self._left_header.text()
-        right_text = self._right_header.text()
-        self._left_header.setText(right_text)
-        self._right_header.setText(left_text)
-
     def _toggle_maximize_subtitle(self):
         """Toggle between maximized subtitle view and full UI."""
         sections = [
@@ -2065,8 +1991,7 @@ class TranslatorWindow(QMainWindow):
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                self._subtitle_left.clear()
-                self._subtitle_right.clear()
+                self._subtitle_area.clear()
 
         self._running = True
         self._save_transcription = self._chk_save_transcription.isChecked()
