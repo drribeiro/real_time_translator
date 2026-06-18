@@ -69,7 +69,8 @@ class SettingsDialog(QDialog):
         self._presets_changed = False
 
         self.setWindowTitle("Configuracoes")
-        self.setFixedSize(580, 480)
+        self.setMinimumSize(620, 520)
+        self.resize(720, 600)
         self.setStyleSheet(self.DIALOG_STYLE)
 
         layout = QVBoxLayout(self)
