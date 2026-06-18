@@ -1785,26 +1785,35 @@ class TranslatorWindow(QMainWindow):
     def setup_tray(self):
         """Create system tray icon with menu."""
         self._tray = QSystemTrayIcon(self)
-        self._tray.setIcon(self._create_tray_icon("#2d8cf0"))
+        self._tray.setIcon(self._load_app_icon())
         self._tray.setToolTip("RealtimeTranslator")
         self._tray.activated.connect(self._on_tray_activated)
+
+        # Set window icon too
+        self.setWindowIcon(self._load_app_icon())
 
         self._rebuild_tray_menu()
         self._tray.show()
 
-    def _create_tray_icon(self, color):
-        """Create a simple colored circle icon for the tray."""
+    def _load_app_icon(self):
+        """Load the app icon from file."""
+        icon_path = os.path.join(os.path.dirname(__file__), "icon.png")
+        if os.path.exists(icon_path):
+            return QIcon(icon_path)
+        # Fallback: generate simple icon
+        return self._create_fallback_icon()
+
+    def _create_fallback_icon(self):
+        """Fallback icon if icon.png is missing."""
         px = QPixmap(32, 32)
         px.fill(QColor(0, 0, 0, 0))
         painter = QPainter(px)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QColor(color))
+        painter.setBrush(QColor("#2d8cf0"))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(4, 4, 24, 24)
-        # "T" letter
         painter.setPen(QColor("white"))
-        font = QFont("Arial", 14, QFont.Weight.Bold)
-        painter.setFont(font)
+        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         painter.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, "T")
         painter.end()
         return QIcon(px)
@@ -1894,12 +1903,10 @@ class TranslatorWindow(QMainWindow):
             self._rebuild_tray_menu()
 
     def _update_tray_icon(self):
-        """Update tray icon color based on state."""
+        """Update tray tooltip based on state."""
         if self._running:
-            self._tray.setIcon(self._create_tray_icon("#00cc66"))
             self._tray.setToolTip("RealtimeTranslator — Ativo")
         else:
-            self._tray.setIcon(self._create_tray_icon("#2d8cf0"))
             self._tray.setToolTip("RealtimeTranslator")
 
     # ==================== CLOSE ====================
