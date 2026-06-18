@@ -819,8 +819,8 @@ class TranslatorWindow(QMainWindow):
         vol_section = QWidget()
         vol_section.setObjectName("configSection")
         vs = QVBoxLayout(vol_section)
-        vs.setContentsMargins(20, 14, 20, 14)
-        vs.setSpacing(14)
+        vs.setContentsMargins(20, 16, 20, 16)
+        vs.setSpacing(22)
 
         vs_title = QLabel("VOLUMES E VELOCIDADE")
         vs_title.setStyleSheet("color: #e07c3a; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
