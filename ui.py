@@ -36,7 +36,7 @@ ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
 
 
 class PipelineSignals(QObject):
-    new_subtitle = pyqtSignal(str, str)
+    new_subtitle = pyqtSignal(str, str, str)  # (original, translated, source)
     status_changed = pyqtSignal(str)
     error = pyqtSignal(str)
 
@@ -998,14 +998,16 @@ class TranslatorWindow(QMainWindow):
         self.signals.status_changed.connect(self._set_status)
         self.signals.error.connect(self._set_error)
 
-    def _add_subtitle(self, original, translated):
+    def _add_subtitle(self, original, translated, source="AUDIO"):
         src = self._lang_in.currentText()[:2].upper()
         tgt = self._lang_out.currentText()[:2].upper()
+        source_tag = f'<span style="color: #e07c3a;">[{source}]</span> ' if source == "MIC" else ""
+
         self._subtitle_area.append(
-            f'<span style="color: #888; font-size: 12px;">[{src}] {original}</span>'
+            f'{source_tag}<span style="color: #888; font-size: 12px;">[{src}] {original}</span>'
         )
         self._subtitle_area.append(
-            f'<span style="color: #fff; font-size: 15px; font-weight: bold;">[{tgt}] {translated}</span>'
+            f'{source_tag}<span style="color: #fff; font-size: 15px; font-weight: bold;">[{tgt}] {translated}</span>'
         )
         self._subtitle_area.append("")
         bar = self._subtitle_area.verticalScrollBar()
@@ -1013,12 +1015,12 @@ class TranslatorWindow(QMainWindow):
 
         # Update floating subtitle
         self._floating_sub.update_text(
-            f"[{src}] {original}",
+            f"[{source}] [{src}] {original}",
             f"[{tgt}] {translated}",
         )
 
         # Log to file
-        self._log_entry(src, original, tgt, translated)
+        self._log_entry(src, original, tgt, translated, source=source)
 
     def _set_status(self, text):
         self._status_label.setText(text)
@@ -1291,9 +1293,20 @@ class TranslatorWindow(QMainWindow):
         filename = f"{ts}_{src}-{tgt}.txt"
         path = os.path.join(sessions_dir, filename)
         self._log_file = open(path, "w", encoding="utf-8")
+
+        # Header
+        preset_name = self._preset_combo.currentText()
+        preset_tag = preset_name if preset_name != "-- Selecionar --" else "Manual"
+        modes = []
+        if self._btn_subtitle.isChecked(): modes.append("Legenda")
+        if self._btn_audio_in.isChecked(): modes.append("Audio In")
+        if self._btn_mic_out.isChecked(): modes.append("Mic Out")
+
         self._log_file.write(f"# RealtimeTranslator Session\n")
-        self._log_file.write(f"# {datetime.now().isoformat()}\n")
-        self._log_file.write(f"# {self._lang_in.currentText()} -> {self._lang_out.currentText()}\n\n")
+        self._log_file.write(f"# Data: {datetime.now().isoformat()}\n")
+        self._log_file.write(f"# Preset: {preset_tag}\n")
+        self._log_file.write(f"# Idiomas: {self._lang_in.currentText()} -> {self._lang_out.currentText()}\n")
+        self._log_file.write(f"# Modos: {', '.join(modes)}\n\n")
         self.signals.status_changed.emit(f"Log: {filename}")
 
     def _close_log_file(self):
@@ -1301,14 +1314,14 @@ class TranslatorWindow(QMainWindow):
             self._log_file.close()
             self._log_file = None
 
-    def _log_entry(self, src_label, original, tgt_label, translated):
+    def _log_entry(self, src_label, original, tgt_label, translated, source="AUDIO"):
         if not self._log_file:
             return
         ts = datetime.now().strftime("%H:%M:%S")
         if self._save_transcription:
-            self._log_file.write(f"[{ts}] [{src_label}] {original}\n")
+            self._log_file.write(f"[{ts}] [{source}] [{src_label}] {original}\n")
         if self._save_translation:
-            self._log_file.write(f"[{ts}] [{tgt_label}] {translated}\n")
+            self._log_file.write(f"[{ts}] [{source}] [{tgt_label}] {translated}\n")
         if self._save_transcription or self._save_translation:
             self._log_file.write("\n")
             self._log_file.flush()
@@ -1472,7 +1485,7 @@ class TranslatorWindow(QMainWindow):
         try:
             translated = self._translator_in.translate(text)
             if self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(text, translated)
+                self.signals.new_subtitle.emit(text, translated, "AUDIO")
             if self._btn_audio_in.isChecked() and translated:
                 threading.Thread(
                     target=self._speak_in, args=(translated,), daemon=True
@@ -1486,7 +1499,7 @@ class TranslatorWindow(QMainWindow):
         try:
             translated = self._translator_out.translate(text)
             if self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(f"[MIC] {text}", f"[MIC] {translated}")
+                self.signals.new_subtitle.emit(text, translated, "MIC")
             virtual_mic = find_device(BLACKHOLE_16CH, kind="output")
             if translated and virtual_mic is not None:
                 threading.Thread(
