@@ -5,3 +5,4 @@ deepgram-sdk>=4.8.0
 deepl>=1.18.0
 PyQt6>=6.7.0
 openai>=1.82.0
+pyobjc-framework-Cocoa>=10.0

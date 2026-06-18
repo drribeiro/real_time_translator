@@ -739,9 +739,7 @@ class TranslatorWindow(QMainWindow):
         self.setWindowTitle("RealtimeTranslator")
         self.setWindowFlags(
             Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.FramelessWindowHint
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         screen = QApplication.primaryScreen().geometry()
         h = int(screen.height() * 0.90)
         self.setMinimumWidth(400)
@@ -781,15 +779,6 @@ class TranslatorWindow(QMainWindow):
         )
         cfg_btn.clicked.connect(self._open_settings)
         tb.addWidget(cfg_btn)
-
-        tb.addSpacing(10)
-
-        for text, slot, hc in [("—", self.showMinimized, "white"), ("x", self._on_close, "#ff5555")]:
-            b = QPushButton(text)
-            b.setFixedSize(32, 32)
-            b.setStyleSheet(f"QPushButton {{ color: #888; background: transparent; border: none; font-size: 18px; }} QPushButton:hover {{ color: {hc}; }}")
-            b.clicked.connect(slot)
-            tb.addWidget(b)
 
         layout.addWidget(title_bar)
 
@@ -1099,8 +1088,7 @@ class TranslatorWindow(QMainWindow):
         # ==================== STYLESHEET ====================
         self.setStyleSheet("""
             #central {
-                background: rgba(22, 22, 28, 0.94);
-                border-radius: 14px; border: 1px solid #2a2a30;
+                background: #16161c;
             }
             #titleBar {
                 background: rgba(30, 30, 36, 0.98);
@@ -1239,18 +1227,6 @@ class TranslatorWindow(QMainWindow):
         self._status_label.setStyleSheet("color: #ff5555; font-size: 11px;")
         get_logger().error(text)
 
-    # ==================== DRAGGING ====================
-
-    def mousePressEvent(self, e):
-        if e.button() == Qt.MouseButton.LeftButton and e.position().y() < 40:
-            self._drag_pos = e.globalPosition().toPoint() - self.pos()
-
-    def mouseMoveEvent(self, e):
-        if self._drag_pos and e.buttons() & Qt.MouseButton.LeftButton:
-            self.move(e.globalPosition().toPoint() - self._drag_pos)
-
-    def mouseReleaseEvent(self, e):
-        self._drag_pos = None
 
     # ==================== PRESETS ====================
 
@@ -1929,8 +1905,20 @@ class TranslatorWindow(QMainWindow):
 
 
 def main():
+    # Set app name before QApplication init (macOS menu bar name)
+    if sys.platform == "darwin":
+        # This makes macOS show "RealtimeTranslator" instead of "Python" in the menu bar
+        try:
+            from Foundation import NSBundle
+            bundle = NSBundle.mainBundle()
+            info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+            info["CFBundleName"] = "RealtimeTranslator"
+        except ImportError:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName("RealtimeTranslator")
+    app.setApplicationDisplayName("RealtimeTranslator")
     app.setQuitOnLastWindowClosed(False)  # Keep running in tray
 
     # Init logger from saved settings
