@@ -242,8 +242,8 @@ class SettingsDialog(QDialog):
         self._presets_changed = False
 
         self.setWindowTitle("Configuracoes")
-        self.setMinimumSize(620, 520)
-        self.resize(720, 600)
+        self.setMinimumSize(680, 670)
+        self.resize(780, 750)
         self.setStyleSheet(self.DIALOG_STYLE)
 
         layout = QVBoxLayout(self)
@@ -470,6 +470,66 @@ class SettingsDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
+        # ---- Quick profiles ----
+        profiles_group = QGroupBox("Perfis Rapidos")
+        pg = QVBoxLayout()
+
+        prof_desc = QLabel(
+            "Escolha um perfil para ajustar todas as configuracoes de uma vez, "
+            "ou personalize manualmente abaixo."
+        )
+        prof_desc.setStyleSheet("color: #888; font-size: 11px;")
+        prof_desc.setWordWrap(True)
+        pg.addWidget(prof_desc)
+
+        prof_row = QHBoxLayout()
+        prof_row.setSpacing(10)
+
+        btn_speed = QPushButton("Velocidade Maxima")
+        btn_speed.setToolTip("Menor delay possivel. Pode ter falhas em maquinas lentas.")
+        btn_speed.setStyleSheet(
+            "QPushButton { background: #c0392b; color: white; border: none; border-radius: 6px; "
+            "padding: 10px 16px; font-size: 13px; font-weight: bold; }"
+            "QPushButton:hover { background: #e74c3c; }"
+        )
+        btn_speed.clicked.connect(self._apply_profile_speed)
+        prof_row.addWidget(btn_speed)
+
+        btn_balanced = QPushButton("Equilibrado")
+        btn_balanced.setToolTip("Bom equilibrio entre velocidade e estabilidade. Recomendado.")
+        btn_balanced.setStyleSheet(
+            "QPushButton { background: #2d8cf0; color: white; border: none; border-radius: 6px; "
+            "padding: 10px 16px; font-size: 13px; font-weight: bold; }"
+            "QPushButton:hover { background: #3a9df5; }"
+        )
+        btn_balanced.clicked.connect(self._apply_profile_balanced)
+        prof_row.addWidget(btn_balanced)
+
+        btn_stable = QPushButton("Estabilidade Maxima")
+        btn_stable.setToolTip("Maior estabilidade e qualidade. Delay mais alto.")
+        btn_stable.setStyleSheet(
+            "QPushButton { background: #27ae60; color: white; border: none; border-radius: 6px; "
+            "padding: 10px 16px; font-size: 13px; font-weight: bold; }"
+            "QPushButton:hover { background: #2ecc71; }"
+        )
+        btn_stable.clicked.connect(self._apply_profile_stable)
+        prof_row.addWidget(btn_stable)
+
+        pg.addLayout(prof_row)
+
+        self._profile_desc_label = QLabel("")
+        self._profile_desc_label.setStyleSheet("color: #2d8cf0; font-size: 11px; margin-top: 4px;")
+        self._profile_desc_label.setWordWrap(True)
+        pg.addWidget(self._profile_desc_label)
+
+        profiles_group.setLayout(pg)
+        layout.addWidget(profiles_group)
+
+        # ---- Custom settings below ----
+        custom_label = QLabel("CONFIGURACAO PERSONALIZADA")
+        custom_label.setStyleSheet("color: #888; font-size: 10px; font-weight: bold; letter-spacing: 2px; margin-top: 8px;")
+        layout.addWidget(custom_label)
+
         # Audio buffer
         buf_group = QGroupBox("Captura de Audio")
         bg = QFormLayout()
@@ -559,16 +619,55 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         return tab
 
+    def _apply_profile_speed(self):
+        """Velocidade Maxima: menor delay, pode ser instavel."""
+        self._block_size_combo.setCurrentIndex(0)   # 1024
+        self._endpointing_spin.setCurrentIndex(0)   # 100ms
+        self._interim_check.setChecked(True)
+        self._translate_interim.setChecked(True)
+        self._stt_model_combo.setCurrentIndex(0)    # nova-2
+        self._profile_desc_label.setText(
+            "Velocidade Maxima: Buffer 64ms, endpointing 100ms, interim ativo. "
+            "Delay estimado ~460ms (legenda). Pode causar falhas em conexoes lentas."
+        )
+        self._profile_desc_label.setStyleSheet("color: #c0392b; font-size: 11px; margin-top: 4px;")
+
+    def _apply_profile_balanced(self):
+        """Equilibrado: bom delay com estabilidade."""
+        self._block_size_combo.setCurrentIndex(1)   # 2048
+        self._endpointing_spin.setCurrentIndex(1)   # 150ms
+        self._interim_check.setChecked(True)
+        self._translate_interim.setChecked(False)
+        self._stt_model_combo.setCurrentIndex(0)    # nova-2
+        self._profile_desc_label.setText(
+            "Equilibrado: Buffer 128ms, endpointing 150ms, interim visual. "
+            "Delay estimado ~580ms (legenda). Recomendado para a maioria dos casos."
+        )
+        self._profile_desc_label.setStyleSheet("color: #2d8cf0; font-size: 11px; margin-top: 4px;")
+
+    def _apply_profile_stable(self):
+        """Estabilidade Maxima: mais delay, mais qualidade."""
+        self._block_size_combo.setCurrentIndex(2)   # 4096
+        self._endpointing_spin.setCurrentIndex(3)   # 300ms
+        self._interim_check.setChecked(False)
+        self._translate_interim.setChecked(False)
+        self._stt_model_combo.setCurrentIndex(0)    # nova-2
+        self._profile_desc_label.setText(
+            "Estabilidade: Buffer 256ms, endpointing 300ms, sem interim. "
+            "Delay estimado ~960ms (legenda). Mais estavel, frases mais completas."
+        )
+        self._profile_desc_label.setStyleSheet("color: #27ae60; font-size: 11px; margin-top: 4px;")
+
     def _update_latency_estimate(self):
         block_sizes = [1024, 2048, 4096]
         endpointings = [100, 150, 200, 300, 500]
         block = block_sizes[self._block_size_combo.currentIndex()]
         ep = endpointings[self._endpointing_spin.currentIndex()]
 
-        buffer_ms = block / 16  # 16 samples per ms at 16kHz
-        stt_ms = 200 + ep  # base STT + endpointing wait
-        translate_ms = 200  # avg DeepL
-        tts_ms = 600  # avg macOS say
+        buffer_ms = block / 16
+        stt_ms = 200 + ep
+        translate_ms = 200
+        tts_ms = 600
 
         subtitle_total = buffer_ms + stt_ms + translate_ms
         audio_total = subtitle_total + tts_ms
