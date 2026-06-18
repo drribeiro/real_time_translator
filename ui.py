@@ -1942,16 +1942,13 @@ class TranslatorWindow(QMainWindow):
         self._rebuild_tray_menu()
 
     def _set_controls_enabled(self, enabled):
+        # These require restart — disable during run
         self._lang_in.setEnabled(enabled)
         self._lang_out.setEnabled(enabled)
         self._mic_combo.setEnabled(enabled)
-        self._btn_subtitle.setEnabled(enabled)
-        self._btn_audio_in.setEnabled(enabled)
-        self._btn_mic_out.setEnabled(enabled)
-        self._chk_save_transcription.setEnabled(enabled)
-        self._chk_save_translation.setEnabled(enabled)
         self._preset_combo.setEnabled(enabled)
         self._session_name.setEnabled(enabled)
+        # Functions stay enabled — can toggle live during session
 
     def _get_selected_mic_index(self) -> int:
         mic_name = self._mic_combo.currentText()
