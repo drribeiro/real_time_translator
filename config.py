@@ -5,9 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Audio settings
-SAMPLE_RATE = 16000
+SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "16000"))
 CHANNELS = 1
-BLOCK_SIZE = 4096
+BLOCK_SIZE = int(os.getenv("BLOCK_SIZE", "2048"))
+
+# STT settings
+ENDPOINTING_MS = int(os.getenv("ENDPOINTING_MS", "150"))
+INTERIM_SUBTITLES = os.getenv("INTERIM_SUBTITLES", "true").lower() == "true"
 
 # Device names
 BLACKHOLE_2CH = "BlackHole 2ch"

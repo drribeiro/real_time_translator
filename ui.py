@@ -254,6 +254,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_voice_tab(), "Voz")
         self._tabs.addTab(self._build_storage_tab(), "Armazenamento")
         self._tabs.addTab(self._build_presets_tab(), "Presets")
+        self._tabs.addTab(self._build_performance_tab(), "Performance")
         layout.addWidget(self._tabs)
 
         # Save / Cancel
@@ -463,6 +464,122 @@ class SettingsDialog(QDialog):
 
     # ==================== TAB: PRESETS ====================
 
+    # ==================== TAB: PERFORMANCE ====================
+
+    def _build_performance_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Audio buffer
+        buf_group = QGroupBox("Captura de Audio")
+        bg = QFormLayout()
+
+        self._block_size_combo = QComboBox()
+        self._block_size_combo.addItems(["1024 (64ms - menor delay)", "2048 (128ms - recomendado)", "4096 (256ms - mais estavel)"])
+        saved_block = int(os.getenv("BLOCK_SIZE", "2048"))
+        idx = {1024: 0, 2048: 1, 4096: 2}.get(saved_block, 1)
+        self._block_size_combo.setCurrentIndex(idx)
+        bg.addRow("Buffer size:", self._block_size_combo)
+
+        buf_info = QLabel("Menor buffer = menor delay, mas pode causar falhas de audio em maquinas lentas")
+        buf_info.setStyleSheet("color: #666; font-size: 10px;")
+        buf_info.setWordWrap(True)
+        bg.addRow("", buf_info)
+
+        buf_group.setLayout(bg)
+        layout.addWidget(buf_group)
+
+        # STT settings
+        stt_group = QGroupBox("Speech-to-Text (Deepgram)")
+        sg = QFormLayout()
+
+        self._endpointing_spin = QComboBox()
+        self._endpointing_spin.addItems(["100ms (agressivo)", "150ms (recomendado)", "200ms (equilibrado)", "300ms (conservador)", "500ms (muito conservador)"])
+        saved_ep = int(os.getenv("ENDPOINTING_MS", "150"))
+        ep_idx = {100: 0, 150: 1, 200: 2, 300: 3, 500: 4}.get(saved_ep, 1)
+        self._endpointing_spin.setCurrentIndex(ep_idx)
+        sg.addRow("Endpointing:", self._endpointing_spin)
+
+        ep_info = QLabel("Tempo de silencio (ms) para considerar fim de frase. Menor = frases mais curtas e rapidas")
+        ep_info.setStyleSheet("color: #666; font-size: 10px;")
+        ep_info.setWordWrap(True)
+        sg.addRow("", ep_info)
+
+        self._interim_check = QCheckBox("Mostrar texto parcial na legenda (interim results)")
+        self._interim_check.setChecked(os.getenv("INTERIM_SUBTITLES", "true").lower() == "true")
+        self._interim_check.setStyleSheet("color: #aaa; font-size: 12px;")
+        sg.addRow("", self._interim_check)
+
+        interim_info = QLabel("Mostra texto na legenda antes de finalizar a frase. Mais responsivo, mas texto pode mudar")
+        interim_info.setStyleSheet("color: #666; font-size: 10px;")
+        interim_info.setWordWrap(True)
+        sg.addRow("", interim_info)
+
+        self._stt_model_combo = QComboBox()
+        self._stt_model_combo.addItems(["nova-2 (recomendado)", "nova-3 (mais recente)"])
+        saved_model = os.getenv("STT_MODEL", "nova-2")
+        self._stt_model_combo.setCurrentIndex(1 if saved_model == "nova-3" else 0)
+        sg.addRow("Modelo:", self._stt_model_combo)
+
+        stt_group.setLayout(sg)
+        layout.addWidget(stt_group)
+
+        # Translation settings
+        trl_group = QGroupBox("Traducao")
+        tg = QFormLayout()
+
+        self._translate_interim = QCheckBox("Traduzir textos parciais (mais rapido, usa mais API)")
+        self._translate_interim.setChecked(os.getenv("TRANSLATE_INTERIM", "false").lower() == "true")
+        self._translate_interim.setStyleSheet("color: #aaa; font-size: 12px;")
+        tg.addRow("", self._translate_interim)
+
+        trl_info = QLabel("Se ativado, traduz cada resultado parcial do STT. Legendas mais rapidas mas consome mais quota do DeepL")
+        trl_info.setStyleSheet("color: #666; font-size: 10px;")
+        trl_info.setWordWrap(True)
+        tg.addRow("", trl_info)
+
+        trl_group.setLayout(tg)
+        layout.addWidget(trl_group)
+
+        # Latency estimate
+        est_group = QGroupBox("Estimativa de Latencia")
+        eg = QVBoxLayout()
+        self._latency_label = QLabel("")
+        self._latency_label.setStyleSheet("color: #2d8cf0; font-size: 12px;")
+        self._latency_label.setWordWrap(True)
+        eg.addWidget(self._latency_label)
+        est_group.setLayout(eg)
+        layout.addWidget(est_group)
+
+        # Update estimate on change
+        self._block_size_combo.currentIndexChanged.connect(self._update_latency_estimate)
+        self._endpointing_spin.currentIndexChanged.connect(self._update_latency_estimate)
+        self._update_latency_estimate()
+
+        layout.addStretch()
+        return tab
+
+    def _update_latency_estimate(self):
+        block_sizes = [1024, 2048, 4096]
+        endpointings = [100, 150, 200, 300, 500]
+        block = block_sizes[self._block_size_combo.currentIndex()]
+        ep = endpointings[self._endpointing_spin.currentIndex()]
+
+        buffer_ms = block / 16  # 16 samples per ms at 16kHz
+        stt_ms = 200 + ep  # base STT + endpointing wait
+        translate_ms = 200  # avg DeepL
+        tts_ms = 600  # avg macOS say
+
+        subtitle_total = buffer_ms + stt_ms + translate_ms
+        audio_total = subtitle_total + tts_ms
+
+        self._latency_label.setText(
+            f"Legenda: ~{int(subtitle_total)}ms  |  "
+            f"Audio traduzido: ~{int(audio_total)}ms\n"
+            f"(Buffer: {int(buffer_ms)}ms + STT: ~{int(stt_ms)}ms + "
+            f"Traducao: ~{translate_ms}ms + TTS: ~{tts_ms}ms)"
+        )
+
     def _build_presets_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -628,6 +745,16 @@ class SettingsDialog(QDialog):
         set_key(ENV_FILE, "SESSIONS_PATH", self._sessions_path_input.text().strip())
         set_key(ENV_FILE, "LOGS_PATH", self._logs_path_input.text().strip())
         set_key(ENV_FILE, "ENABLE_LOGS", "true" if self._enable_logs.isChecked() else "false")
+
+        # Save performance settings
+        block_sizes = ["1024", "2048", "4096"]
+        endpointings = ["100", "150", "200", "300", "500"]
+        set_key(ENV_FILE, "BLOCK_SIZE", block_sizes[self._block_size_combo.currentIndex()])
+        set_key(ENV_FILE, "ENDPOINTING_MS", endpointings[self._endpointing_spin.currentIndex()])
+        set_key(ENV_FILE, "INTERIM_SUBTITLES", "true" if self._interim_check.isChecked() else "false")
+        set_key(ENV_FILE, "TRANSLATE_INTERIM", "true" if self._translate_interim.isChecked() else "false")
+        stt_models = ["nova-2", "nova-3"]
+        set_key(ENV_FILE, "STT_MODEL", stt_models[self._stt_model_combo.currentIndex()])
 
         # Reload env
         load_dotenv(ENV_FILE, override=True)
@@ -835,6 +962,10 @@ class TranslatorWindow(QMainWindow):
         self._tts_speed = 220
         self._tts_engine = os.getenv("TTS_ENGINE", "macos")
         self._openai_voice = os.getenv("OPENAI_VOICE", "nova")
+        self._interim_subtitles = os.getenv("INTERIM_SUBTITLES", "true").lower() == "true"
+        self._translate_interim = os.getenv("TRANSLATE_INTERIM", "false").lower() == "true"
+        self._endpointing_ms = int(os.getenv("ENDPOINTING_MS", "150"))
+        self._stt_model = os.getenv("STT_MODEL", "nova-2")
 
         # Logging
         self._log_file = None
@@ -1469,6 +1600,12 @@ class TranslatorWindow(QMainWindow):
             self._openai_voice = dialog.get_openai_voice()
             self._sessions_path = dialog.get_sessions_path()
 
+            # Reload performance settings from env
+            self._interim_subtitles = os.getenv("INTERIM_SUBTITLES", "true").lower() == "true"
+            self._translate_interim = os.getenv("TRANSLATE_INTERIM", "false").lower() == "true"
+            self._endpointing_ms = int(os.getenv("ENDPOINTING_MS", "150"))
+            self._stt_model = os.getenv("STT_MODEL", "nova-2")
+
             # Setup logger
             from app_logger import setup_logger
             setup_logger(dialog.get_logs_path(), dialog.get_enable_logs())
@@ -1822,6 +1959,7 @@ class TranslatorWindow(QMainWindow):
                     self._incoming_transcriber = RealtimeTranscriber(
                         language=lang_in["stt"],
                         on_transcript=self._on_incoming,
+                        endpointing_ms=self._endpointing_ms,
                     )
                     self._incoming_transcriber.start()
                     time.sleep(0.5)
@@ -1849,6 +1987,7 @@ class TranslatorWindow(QMainWindow):
                     self._outgoing_transcriber = RealtimeTranscriber(
                         language=lang_out["stt"],
                         on_transcript=self._on_outgoing,
+                        endpointing_ms=self._endpointing_ms,
                     )
                     self._outgoing_transcriber.start()
                     time.sleep(0.5)
@@ -1961,8 +2100,22 @@ class TranslatorWindow(QMainWindow):
     # ==================== TRANSCRIPTION CALLBACKS ====================
 
     def _on_incoming(self, text, is_final):
-        if not is_final or not text.strip():
+        if not text.strip():
             return
+
+        # Interim subtitles (show partial text immediately, no translation)
+        if not is_final:
+            if self._interim_subtitles and self._btn_subtitle.isChecked():
+                self.signals.new_subtitle.emit(text, "...", "AUDIO")
+            if self._translate_interim and self._btn_subtitle.isChecked():
+                try:
+                    translated = self._translator_in.translate(text)
+                    self.signals.new_subtitle.emit(text, translated, "AUDIO")
+                except Exception:
+                    pass
+            return
+
+        # Final result — always translate and process
         try:
             translated = self._translator_in.translate(text)
             if self._btn_subtitle.isChecked():

@@ -5,7 +5,7 @@ import time
 from deepgram import DeepgramClient
 from deepgram.core.events import EventType
 from deepgram.listen.v1.types.listen_v1results import ListenV1Results
-from config import DEEPGRAM_API_KEY, SAMPLE_RATE, BLACKHOLE_2CH
+from config import DEEPGRAM_API_KEY, SAMPLE_RATE, ENDPOINTING_MS, BLACKHOLE_2CH
 from audio_capture import AudioCapture
 
 
@@ -13,10 +13,19 @@ class RealtimeTranscriber:
     """Connects to Deepgram WebSocket and streams audio for real-time transcription."""
 
     def __init__(self, api_key: str = DEEPGRAM_API_KEY, language: str = "en-US",
-                 on_transcript=None):
+                 on_transcript=None, endpointing_ms: int = ENDPOINTING_MS,
+                 model: str = "nova-2"):
+        """
+        Args:
+            on_transcript: callback(text: str, is_final: bool)
+            endpointing_ms: silence duration (ms) to consider end of utterance
+            model: Deepgram model (nova-2, nova-3)
+        """
         self.api_key = api_key
         self.language = language
         self.on_transcript = on_transcript
+        self.endpointing_ms = endpointing_ms
+        self.model = model
         self._connection = None
         self._listen_thread = None
         self._running = False
@@ -25,9 +34,8 @@ class RealtimeTranscriber:
         """Open WebSocket connection to Deepgram and start listening."""
         client = DeepgramClient(api_key=self.api_key)
 
-        # Open connection as context manager — store the context to keep it alive
         self._ctx = client.listen.v1.connect(
-            model="nova-2",
+            model=self.model,
             language=self.language,
             encoding="linear16",
             sample_rate=SAMPLE_RATE,
@@ -35,6 +43,7 @@ class RealtimeTranscriber:
             interim_results=True,
             punctuate=True,
             smart_format=True,
+            endpointing=str(self.endpointing_ms),
         )
         self._connection = self._ctx.__enter__()
 
