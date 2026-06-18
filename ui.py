@@ -643,8 +643,8 @@ class TranslatorWindow(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumSize(620, 560)
-        self.resize(700, 580)
+        self.setMinimumSize(760, 640)
+        self.resize(820, 700)
 
         central = QWidget()
         central.setObjectName("central")
@@ -657,107 +657,144 @@ class TranslatorWindow(QMainWindow):
         # ==================== TITLE BAR ====================
         title_bar = QWidget()
         title_bar.setObjectName("titleBar")
-        title_bar.setFixedHeight(40)
+        title_bar.setFixedHeight(44)
         tb = QHBoxLayout(title_bar)
-        tb.setContentsMargins(12, 0, 12, 0)
+        tb.setContentsMargins(16, 0, 12, 0)
 
         self._status_dot = QLabel()
-        self._status_dot.setFixedSize(10, 10)
-        self._status_dot.setStyleSheet("background: #666; border-radius: 5px;")
+        self._status_dot.setFixedSize(12, 12)
+        self._status_dot.setStyleSheet("background: #666; border-radius: 6px;")
         tb.addWidget(self._status_dot)
 
         title = QLabel("  RealtimeTranslator")
-        title.setStyleSheet("color: #ccc; font-size: 13px; font-weight: bold;")
+        title.setStyleSheet("color: #eee; font-size: 14px; font-weight: bold; letter-spacing: 0.5px;")
         tb.addWidget(title)
         tb.addStretch()
 
         cfg_btn = QPushButton("Config")
-        cfg_btn.setFixedSize(50, 26)
+        cfg_btn.setFixedSize(60, 28)
         cfg_btn.setStyleSheet(
-            "QPushButton { color: #aaa; background: #333; border: 1px solid #555; border-radius: 4px; font-size: 11px; }"
-            "QPushButton:hover { color: white; background: #444; }"
+            "QPushButton { color: #bbb; background: #3a3a40; border: 1px solid #555; border-radius: 6px; font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover { color: white; background: #4a4a50; }"
         )
         cfg_btn.clicked.connect(self._open_settings)
         tb.addWidget(cfg_btn)
 
-        tb.addSpacing(8)
+        tb.addSpacing(10)
 
         for text, slot, hc in [("—", self.showMinimized, "white"), ("x", self._on_close, "#ff5555")]:
             b = QPushButton(text)
-            b.setFixedSize(30, 30)
-            b.setStyleSheet(f"QPushButton {{ color: #aaa; background: transparent; border: none; font-size: 16px; }} QPushButton:hover {{ color: {hc}; }}")
+            b.setFixedSize(32, 32)
+            b.setStyleSheet(f"QPushButton {{ color: #888; background: transparent; border: none; font-size: 18px; }} QPushButton:hover {{ color: {hc}; }}")
             b.clicked.connect(slot)
             tb.addWidget(b)
 
         layout.addWidget(title_bar)
 
-        # ==================== PRESET ROW ====================
-        preset_row = QWidget()
-        preset_row.setObjectName("settingsRow")
-        pr = QHBoxLayout(preset_row)
-        pr.setContentsMargins(12, 8, 12, 4)
-        pr.setSpacing(8)
+        # ==================== PRESET SECTION ====================
+        preset_section = QWidget()
+        preset_section.setObjectName("presetSection")
+        ps = QVBoxLayout(preset_section)
+        ps.setContentsMargins(20, 14, 20, 14)
+        ps.setSpacing(10)
 
-        pr.addWidget(self._lbl("Preset:"))
+        # Preset header
+        ps_header = QHBoxLayout()
+        ps_title = QLabel("PRESET")
+        ps_title.setStyleSheet("color: #2d8cf0; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        ps_header.addWidget(ps_title)
+        ps_header.addStretch()
+        ps.addLayout(ps_header)
+
+        # Preset controls
+        ps_row = QHBoxLayout()
+        ps_row.setSpacing(10)
+
         self._preset_combo = QComboBox()
-        self._preset_combo.addItem("-- Selecionar --")
+        self._preset_combo.addItem("-- Nenhum preset --")
         for name in self._presets:
             self._preset_combo.addItem(name)
-        self._preset_combo.setFixedWidth(180)
+        self._preset_combo.setMinimumWidth(220)
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
-        pr.addWidget(self._preset_combo)
+        ps_row.addWidget(self._preset_combo)
 
-        btn_save_preset = QPushButton("Salvar")
-        btn_save_preset.setFixedHeight(26)
-        btn_save_preset.setStyleSheet(self._small_btn_style("#2d8cf0"))
-        btn_save_preset.clicked.connect(self._save_preset)
-        pr.addWidget(btn_save_preset)
+        self._btn_save_preset = QPushButton("Salvar")
+        self._btn_save_preset.setFixedHeight(30)
+        self._btn_save_preset.setToolTip("Sobrescrever o preset selecionado")
+        self._btn_save_preset.setStyleSheet(self._small_btn_style("#2d8cf0"))
+        self._btn_save_preset.clicked.connect(self._save_preset)
+        ps_row.addWidget(self._btn_save_preset)
 
-        btn_del_preset = QPushButton("Excluir")
-        btn_del_preset.setFixedHeight(26)
-        btn_del_preset.setStyleSheet(self._small_btn_style("#c0392b"))
-        btn_del_preset.clicked.connect(self._delete_preset)
-        pr.addWidget(btn_del_preset)
+        self._btn_saveas_preset = QPushButton("Salvar como...")
+        self._btn_saveas_preset.setFixedHeight(30)
+        self._btn_saveas_preset.setToolTip("Salvar como novo preset")
+        self._btn_saveas_preset.setStyleSheet(self._small_btn_style("#8e44ad"))
+        self._btn_saveas_preset.clicked.connect(self._save_preset_as)
+        ps_row.addWidget(self._btn_saveas_preset)
 
-        pr.addStretch()
-        layout.addWidget(preset_row)
+        self._btn_del_preset = QPushButton("Excluir")
+        self._btn_del_preset.setFixedHeight(30)
+        self._btn_del_preset.setStyleSheet(self._small_btn_style("#c0392b"))
+        self._btn_del_preset.clicked.connect(self._delete_preset)
+        ps_row.addWidget(self._btn_del_preset)
 
-        # ==================== LANGUAGE ROW ====================
-        lang_row = QWidget()
-        lang_row.setObjectName("settingsRow")
-        lr = QHBoxLayout(lang_row)
-        lr.setContentsMargins(12, 4, 12, 4)
-        lr.setSpacing(8)
+        ps_row.addStretch()
+        ps.addLayout(ps_row)
 
-        lr.addWidget(self._lbl("Idioma IN:"))
+        # Preset summary
+        self._preset_summary = QLabel("")
+        self._preset_summary.setStyleSheet("color: #666; font-size: 11px; padding: 2px 0;")
+        self._preset_summary.setWordWrap(True)
+        ps.addWidget(self._preset_summary)
+
+        layout.addWidget(preset_section)
+
+        layout.addWidget(self._sep())
+
+        # ==================== LANGUAGE + DEVICE SECTION ====================
+        config_section = QWidget()
+        config_section.setObjectName("configSection")
+        cs = QVBoxLayout(config_section)
+        cs.setContentsMargins(20, 14, 20, 14)
+        cs.setSpacing(12)
+
+        # Section title
+        cs_title = QLabel("IDIOMAS E DISPOSITIVO")
+        cs_title.setStyleSheet("color: #27ae60; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        cs.addWidget(cs_title)
+
+        # Language row
+        lang_row = QHBoxLayout()
+        lang_row.setSpacing(12)
+
+        lang_row.addWidget(self._field_label("Idioma de entrada"))
         self._lang_in = QComboBox()
         for name in LANGUAGES:
             self._lang_in.addItem(name)
         self._lang_in.setCurrentText("English")
-        self._lang_in.setFixedWidth(140)
-        lr.addWidget(self._lang_in)
+        self._lang_in.setMinimumWidth(160)
+        lang_row.addWidget(self._lang_in)
 
-        lr.addSpacing(12)
+        arrow = QLabel("  ->  ")
+        arrow.setStyleSheet("color: #555; font-size: 16px; font-weight: bold;")
+        lang_row.addWidget(arrow)
 
-        lr.addWidget(self._lbl("Idioma OUT:"))
+        lang_row.addWidget(self._field_label("Idioma de saida"))
         self._lang_out = QComboBox()
         for name in LANGUAGES:
             self._lang_out.addItem(name)
         self._lang_out.setCurrentText("Portugues (BR)")
-        self._lang_out.setFixedWidth(140)
-        lr.addWidget(self._lang_out)
+        self._lang_out.setMinimumWidth(160)
+        lang_row.addWidget(self._lang_out)
 
-        lr.addStretch()
-        layout.addWidget(lang_row)
+        lang_row.addStretch()
+        cs.addLayout(lang_row)
 
-        # ==================== DEVICE ROW ====================
-        dev_row = QWidget()
-        dev_row.setObjectName("settingsRow")
-        dr = QHBoxLayout(dev_row)
-        dr.setContentsMargins(12, 4, 12, 4)
-        dr.setSpacing(8)
+        # Mic row
+        mic_row = QHBoxLayout()
+        mic_row.setSpacing(12)
 
-        dr.addWidget(self._lbl("Mic:"))
+        mic_row.addWidget(self._field_label("Microfone"))
         self._mic_combo = QComboBox()
         self._mic_devices = get_input_devices()
         default_in = sd.default.device[0]
@@ -768,160 +805,170 @@ class TranslatorWindow(QMainWindow):
                 if dev_idx == default_in:
                     default_idx = self._mic_combo.count() - 1
         self._mic_combo.setCurrentIndex(default_idx)
-        self._mic_combo.setFixedWidth(200)
-        dr.addWidget(self._mic_combo)
+        self._mic_combo.setMinimumWidth(260)
+        mic_row.addWidget(self._mic_combo)
 
-        dr.addStretch()
-        layout.addWidget(dev_row)
+        mic_row.addStretch()
+        cs.addLayout(mic_row)
 
-        # ==================== VOLUME ROW 1: Speaker Original ====================
-        vr1_w = QWidget()
-        vr1_w.setObjectName("settingsRow")
-        vr1 = QHBoxLayout(vr1_w)
-        vr1.setContentsMargins(12, 6, 12, 2)
-        vr1.setSpacing(8)
+        layout.addWidget(config_section)
 
-        l1 = QLabel("Speaker Original")
-        l1.setStyleSheet("color: #e07c3a; font-size: 12px; font-weight: bold;")
-        l1.setFixedWidth(130)
-        vr1.addWidget(l1)
+        layout.addWidget(self._sep())
+
+        # ==================== VOLUME SECTION ====================
+        vol_section = QWidget()
+        vol_section.setObjectName("configSection")
+        vs = QVBoxLayout(vol_section)
+        vs.setContentsMargins(20, 14, 20, 14)
+        vs.setSpacing(14)
+
+        vs_title = QLabel("VOLUMES E VELOCIDADE")
+        vs_title.setStyleSheet("color: #e07c3a; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        vs.addWidget(vs_title)
+
+        # Speaker Original
+        v1 = QHBoxLayout()
+        v1.setSpacing(12)
+        v1_label = QLabel("Speaker Original")
+        v1_label.setStyleSheet("color: #e07c3a; font-size: 13px; font-weight: bold;")
+        v1_label.setFixedWidth(150)
+        v1.addWidget(v1_label)
 
         self._vol_original = QSlider(Qt.Orientation.Horizontal)
         self._vol_original.setRange(0, 100)
         self._vol_original.setValue(self._original_vol)
-        self._vol_original.setFixedWidth(160)
         self._vol_original.setStyleSheet(self._slider_style("#e07c3a"))
         self._vol_original.valueChanged.connect(self._on_original_vol_changed)
-        vr1.addWidget(self._vol_original)
+        v1.addWidget(self._vol_original)
 
         self._vol_original_lbl = QLabel(f"{self._original_vol}%")
-        self._vol_original_lbl.setStyleSheet("color: #e07c3a; font-size: 12px;")
-        self._vol_original_lbl.setFixedWidth(35)
-        vr1.addWidget(self._vol_original_lbl)
+        self._vol_original_lbl.setStyleSheet("color: #e07c3a; font-size: 13px; font-weight: bold;")
+        self._vol_original_lbl.setFixedWidth(40)
+        self._vol_original_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        v1.addWidget(self._vol_original_lbl)
 
         self._mute_original_btn = QPushButton("MUTE")
         self._mute_original_btn.setCheckable(True)
         self._mute_original_btn.setChecked(True)
-        self._mute_original_btn.setFixedSize(50, 24)
+        self._mute_original_btn.setFixedSize(56, 28)
         self._mute_original_btn.setStyleSheet(
-            "QPushButton { background: #c0392b; color: white; border: none; border-radius: 4px; font-size: 10px; font-weight: bold; }"
-            "QPushButton:!checked { background: #555; color: #aaa; }"
+            "QPushButton { background: #c0392b; color: white; border: none; border-radius: 6px; font-size: 10px; font-weight: bold; }"
+            "QPushButton:!checked { background: #444; color: #888; }"
         )
         self._mute_original_btn.clicked.connect(self._on_mute_original)
-        vr1.addWidget(self._mute_original_btn)
+        v1.addWidget(self._mute_original_btn)
+        vs.addLayout(v1)
 
-        vr1.addStretch()
-        layout.addWidget(vr1_w)
-
-        # ==================== VOLUME ROW 2: Tradutor + Speed ====================
-        vr2_w = QWidget()
-        vr2_w.setObjectName("settingsRow")
-        vr2 = QHBoxLayout(vr2_w)
-        vr2.setContentsMargins(12, 2, 12, 4)
-        vr2.setSpacing(8)
-
-        l2 = QLabel("Voz Tradutor")
-        l2.setStyleSheet("color: #2d8cf0; font-size: 12px; font-weight: bold;")
-        l2.setFixedWidth(130)
-        vr2.addWidget(l2)
+        # Voz Tradutor
+        v2 = QHBoxLayout()
+        v2.setSpacing(12)
+        v2_label = QLabel("Voz Tradutor")
+        v2_label.setStyleSheet("color: #2d8cf0; font-size: 13px; font-weight: bold;")
+        v2_label.setFixedWidth(150)
+        v2.addWidget(v2_label)
 
         self._vol_tts = QSlider(Qt.Orientation.Horizontal)
         self._vol_tts.setRange(0, 100)
         self._vol_tts.setValue(self._tts_vol)
-        self._vol_tts.setFixedWidth(160)
         self._vol_tts.setStyleSheet(self._slider_style("#2d8cf0"))
         self._vol_tts.valueChanged.connect(self._on_tts_vol_changed)
-        vr2.addWidget(self._vol_tts)
+        v2.addWidget(self._vol_tts)
 
         self._vol_tts_lbl = QLabel(f"{self._tts_vol}%")
-        self._vol_tts_lbl.setStyleSheet("color: #2d8cf0; font-size: 12px;")
-        self._vol_tts_lbl.setFixedWidth(35)
-        vr2.addWidget(self._vol_tts_lbl)
+        self._vol_tts_lbl.setStyleSheet("color: #2d8cf0; font-size: 13px; font-weight: bold;")
+        self._vol_tts_lbl.setFixedWidth(40)
+        self._vol_tts_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        v2.addWidget(self._vol_tts_lbl)
+        vs.addLayout(v2)
 
-        vr2.addSpacing(12)
-
-        ls = QLabel("Velocidade:")
-        ls.setStyleSheet("color: #27ae60; font-size: 12px; font-weight: bold;")
-        vr2.addWidget(ls)
+        # Velocidade
+        v3 = QHBoxLayout()
+        v3.setSpacing(12)
+        v3_label = QLabel("Velocidade da Fala")
+        v3_label.setStyleSheet("color: #27ae60; font-size: 13px; font-weight: bold;")
+        v3_label.setFixedWidth(150)
+        v3.addWidget(v3_label)
 
         self._speed_slider = QSlider(Qt.Orientation.Horizontal)
         self._speed_slider.setRange(100, 400)
         self._speed_slider.setValue(self._tts_speed)
-        self._speed_slider.setFixedWidth(90)
         self._speed_slider.setStyleSheet(self._slider_style("#27ae60"))
         self._speed_slider.valueChanged.connect(self._on_speed_changed)
-        vr2.addWidget(self._speed_slider)
+        v3.addWidget(self._speed_slider)
 
         self._speed_lbl = QLabel(f"{self._tts_speed}")
-        self._speed_lbl.setStyleSheet("color: #27ae60; font-size: 12px;")
-        self._speed_lbl.setFixedWidth(30)
-        vr2.addWidget(self._speed_lbl)
+        self._speed_lbl.setStyleSheet("color: #27ae60; font-size: 13px; font-weight: bold;")
+        self._speed_lbl.setFixedWidth(40)
+        self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        v3.addWidget(self._speed_lbl)
+        vs.addLayout(v3)
 
-        vr2.addStretch()
-        layout.addWidget(vr2_w)
+        layout.addWidget(vol_section)
 
-        # ==================== SEPARATOR ====================
         layout.addWidget(self._sep())
 
-        # ==================== MODE TOGGLES ====================
-        ctrl_w = QWidget()
-        ctrl_w.setObjectName("controls")
-        cl = QHBoxLayout(ctrl_w)
-        cl.setContentsMargins(12, 8, 12, 4)
-        cl.setSpacing(8)
+        # ==================== MODES + ACTIONS ====================
+        action_section = QWidget()
+        action_section.setObjectName("actionSection")
+        acts = QVBoxLayout(action_section)
+        acts.setContentsMargins(20, 14, 20, 14)
+        acts.setSpacing(12)
 
-        self._btn_subtitle = self._toggle_btn("Legenda")
-        cl.addWidget(self._btn_subtitle)
+        # Mode toggles
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(10)
 
-        self._btn_audio_in = self._toggle_btn("Audio In")
-        cl.addWidget(self._btn_audio_in)
+        self._btn_subtitle = self._toggle_btn("Legenda", "#2d8cf0")
+        mode_row.addWidget(self._btn_subtitle)
 
-        self._btn_mic_out = self._toggle_btn("Mic Out")
-        cl.addWidget(self._btn_mic_out)
+        self._btn_audio_in = self._toggle_btn("Audio In", "#e07c3a")
+        mode_row.addWidget(self._btn_audio_in)
 
-        cl.addStretch()
-        layout.addWidget(ctrl_w)
+        self._btn_mic_out = self._toggle_btn("Mic Out", "#8e44ad")
+        mode_row.addWidget(self._btn_mic_out)
 
-        # ==================== SAVE OPTIONS + START ====================
-        action_w = QWidget()
-        action_w.setObjectName("controls")
-        al = QHBoxLayout(action_w)
-        al.setContentsMargins(12, 4, 12, 8)
-        al.setSpacing(8)
+        mode_row.addSpacing(20)
 
         self._chk_save_transcription = QCheckBox("Salvar Transcricao")
-        self._chk_save_transcription.setStyleSheet("color: #aaa; font-size: 11px;")
-        al.addWidget(self._chk_save_transcription)
+        self._chk_save_transcription.setStyleSheet("color: #999; font-size: 12px;")
+        mode_row.addWidget(self._chk_save_transcription)
 
         self._chk_save_translation = QCheckBox("Salvar Traducao")
-        self._chk_save_translation.setStyleSheet("color: #aaa; font-size: 11px;")
-        al.addWidget(self._chk_save_translation)
+        self._chk_save_translation.setStyleSheet("color: #999; font-size: 12px;")
+        mode_row.addWidget(self._chk_save_translation)
 
-        al.addStretch()
+        mode_row.addStretch()
+        acts.addLayout(mode_row)
 
-        # PAUSE button
-        self._btn_pause = QPushButton("Pause")
-        self._btn_pause.setFixedSize(70, 34)
-        self._btn_pause.setCheckable(True)
-        self._btn_pause.setEnabled(False)
-        self._btn_pause.setStyleSheet(self._btn_style("#555", "#ff9500"))
-        self._btn_pause.clicked.connect(self._toggle_pause)
-        al.addWidget(self._btn_pause)
+        # Start / Pause buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
 
-        # START / STOP button
         self._btn_start = QPushButton("INICIAR")
-        self._btn_start.setFixedSize(100, 34)
+        self._btn_start.setFixedHeight(42)
+        self._btn_start.setMinimumWidth(160)
         self._btn_start.setStyleSheet(
-            "QPushButton { background: #27ae60; color: white; border: none; border-radius: 6px; "
-            "font-size: 14px; font-weight: bold; }"
+            "QPushButton { background: #27ae60; color: white; border: none; border-radius: 8px; "
+            "font-size: 16px; font-weight: bold; letter-spacing: 1px; }"
             "QPushButton:hover { background: #2ecc71; }"
         )
         self._btn_start.clicked.connect(self._toggle_start)
-        al.addWidget(self._btn_start)
+        btn_row.addWidget(self._btn_start)
 
-        layout.addWidget(action_w)
+        self._btn_pause = QPushButton("Pause")
+        self._btn_pause.setFixedHeight(42)
+        self._btn_pause.setFixedWidth(90)
+        self._btn_pause.setCheckable(True)
+        self._btn_pause.setEnabled(False)
+        self._btn_pause.setStyleSheet(self._btn_style("#444", "#ff9500"))
+        self._btn_pause.clicked.connect(self._toggle_pause)
+        btn_row.addWidget(self._btn_pause)
 
-        # ==================== SEPARATOR ====================
+        btn_row.addStretch()
+        acts.addLayout(btn_row)
+
+        layout.addWidget(action_section)
+
         layout.addWidget(self._sep())
 
         # ==================== SUBTITLE AREA ====================
@@ -929,21 +976,22 @@ class TranslatorWindow(QMainWindow):
         self._subtitle_area.setReadOnly(True)
         self._subtitle_area.setObjectName("subtitleArea")
         self._subtitle_area.setFont(QFont("SF Pro", 14))
+        self._subtitle_area.setMinimumHeight(120)
         layout.addWidget(self._subtitle_area)
 
         # ==================== STATUS BAR ====================
         sb_w = QWidget()
         sb_w.setObjectName("statusBar")
-        sb_w.setFixedHeight(28)
+        sb_w.setFixedHeight(32)
         sbl = QHBoxLayout(sb_w)
-        sbl.setContentsMargins(12, 0, 12, 0)
+        sbl.setContentsMargins(16, 0, 16, 0)
 
         self._status_label = QLabel("Pronto — configure e clique INICIAR")
         self._status_label.setStyleSheet("color: #888; font-size: 11px;")
         sbl.addWidget(self._status_label)
 
         self._output_label = QLabel(f"Output: {self._output_device_name or '?'}")
-        self._output_label.setStyleSheet("color: #666; font-size: 10px;")
+        self._output_label.setStyleSheet("color: #555; font-size: 10px;")
         sbl.addStretch()
         sbl.addWidget(self._output_label)
 
@@ -952,39 +1000,46 @@ class TranslatorWindow(QMainWindow):
         # ==================== STYLESHEET ====================
         self.setStyleSheet("""
             #central {
-                background: rgba(25, 25, 30, 0.92);
-                border-radius: 12px; border: 1px solid #333;
+                background: rgba(22, 22, 28, 0.94);
+                border-radius: 14px; border: 1px solid #2a2a30;
             }
             #titleBar {
-                background: rgba(35, 35, 40, 0.95);
-                border-top-left-radius: 12px; border-top-right-radius: 12px;
+                background: rgba(30, 30, 36, 0.98);
+                border-top-left-radius: 14px; border-top-right-radius: 14px;
             }
-            #settingsRow, #controls {
-                background: rgba(30, 30, 35, 0.9);
+            #presetSection {
+                background: rgba(28, 28, 34, 0.95);
+            }
+            #configSection, #actionSection {
+                background: rgba(26, 26, 32, 0.92);
             }
             #subtitleArea {
-                background: transparent; color: #eee; border: none; padding: 12px;
+                background: transparent; color: #eee; border: none; padding: 16px;
+                selection-background-color: #2d8cf0;
             }
             #statusBar {
-                background: rgba(20, 20, 25, 0.9);
-                border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+                background: rgba(18, 18, 22, 0.95);
+                border-bottom-left-radius: 14px; border-bottom-right-radius: 14px;
             }
             QComboBox {
-                background: #333; color: #ddd; border: 1px solid #555;
-                border-radius: 6px; padding: 4px 8px; font-size: 12px;
+                background: #2a2a30; color: #ddd; border: 1px solid #444;
+                border-radius: 8px; padding: 6px 12px; font-size: 13px;
+                min-height: 20px;
             }
-            QComboBox::drop-down { border: none; }
+            QComboBox::drop-down { border: none; width: 20px; }
             QComboBox QAbstractItemView {
-                background: #333; color: #ddd; selection-background-color: #555;
+                background: #2a2a30; color: #ddd; selection-background-color: #2d8cf0;
+                border: 1px solid #444; border-radius: 4px;
             }
-            QCheckBox { spacing: 5px; }
+            QCheckBox { spacing: 6px; }
             QCheckBox::indicator {
-                width: 14px; height: 14px; border-radius: 3px;
-                border: 1px solid #555; background: #333;
+                width: 16px; height: 16px; border-radius: 4px;
+                border: 1px solid #555; background: #2a2a30;
             }
             QCheckBox::indicator:checked {
                 background: #2d8cf0; border: 1px solid #2d8cf0;
             }
+            QFrame[frameShape="4"] { color: #2a2a30; }
         """)
 
     # ==================== UI HELPERS ====================
@@ -994,30 +1049,42 @@ class TranslatorWindow(QMainWindow):
         l.setStyleSheet("color: #999; font-size: 12px;")
         return l
 
+    def _field_label(self, text):
+        l = QLabel(text)
+        l.setStyleSheet("color: #888; font-size: 12px;")
+        l.setFixedWidth(120)
+        return l
+
     def _sep(self):
         s = QFrame()
         s.setFrameShape(QFrame.Shape.HLine)
-        s.setStyleSheet("color: #333;")
+        s.setStyleSheet("color: #2a2a30;")
         return s
 
-    def _toggle_btn(self, text):
+    def _toggle_btn(self, text, color="#2d8cf0"):
         btn = QPushButton(text)
         btn.setCheckable(True)
-        btn.setFixedHeight(32)
-        btn.setStyleSheet(self._btn_style("#444", "#2d8cf0"))
+        btn.setFixedHeight(34)
+        btn.setMinimumWidth(90)
+        btn.setStyleSheet(f"""
+            QPushButton {{ background: #2a2a30; color: #888; border: 1px solid #444;
+                border-radius: 8px; padding: 4px 16px; font-size: 13px; font-weight: bold; }}
+            QPushButton:hover {{ background: #333; color: #bbb; }}
+            QPushButton:checked {{ background: {color}; color: white; border: 1px solid {color}; }}
+        """)
         return btn
 
     def _slider_style(self, color):
         return f"""
-            QSlider::groove:horizontal {{ height: 6px; background: #444; border-radius: 3px; }}
-            QSlider::handle:horizontal {{ width: 14px; height: 14px; margin: -4px 0; background: {color}; border-radius: 7px; }}
+            QSlider::groove:horizontal {{ height: 6px; background: #333; border-radius: 3px; }}
+            QSlider::handle:horizontal {{ width: 16px; height: 16px; margin: -5px 0; background: {color}; border-radius: 8px; }}
             QSlider::sub-page:horizontal {{ background: {color}; border-radius: 3px; }}
         """
 
     def _btn_style(self, off, on):
         return f"""
             QPushButton {{ background: {off}; color: #ccc; border: 1px solid #555;
-                border-radius: 6px; padding: 4px 14px; font-size: 12px; font-weight: bold; }}
+                border-radius: 8px; padding: 6px 16px; font-size: 13px; font-weight: bold; }}
             QPushButton:hover {{ background: #555; }}
             QPushButton:checked {{ background: {on}; color: white; border: 1px solid {on}; }}
         """
@@ -1025,12 +1092,12 @@ class TranslatorWindow(QMainWindow):
     def _small_btn_style(self, color):
         return f"""
             QPushButton {{ background: {color}; color: white; border: none;
-                border-radius: 4px; padding: 2px 10px; font-size: 11px; }}
-            QPushButton:hover {{ opacity: 0.8; }}
+                border-radius: 6px; padding: 4px 14px; font-size: 12px; font-weight: bold; }}
+            QPushButton:hover {{ background: {color}cc; }}
         """
 
     def _set_dot(self, color):
-        self._status_dot.setStyleSheet(f"background: {color}; border-radius: 5px;")
+        self._status_dot.setStyleSheet(f"background: {color}; border-radius: 6px;")
 
     # ==================== SIGNALS ====================
 
@@ -1149,35 +1216,66 @@ class TranslatorWindow(QMainWindow):
 
     def _on_preset_selected(self, index):
         if index <= 0:
+            self._preset_summary.setText("")
             return
         name = self._preset_combo.currentText()
         if name in self._presets:
             self._apply_config(self._presets[name])
+            self._update_preset_summary(name)
 
     def _refresh_preset_combo(self):
         """Rebuild the preset dropdown from current presets dict."""
         self._preset_combo.blockSignals(True)
         self._preset_combo.clear()
-        self._preset_combo.addItem("-- Selecionar --")
+        self._preset_combo.addItem("-- Nenhum preset --")
         for name in self._presets:
             self._preset_combo.addItem(name)
         self._preset_combo.blockSignals(False)
 
     def _save_preset(self):
-        name, ok = QInputDialog.getText(self, "Salvar Preset", "Nome do preset:")
+        """Overwrite the currently selected preset."""
+        name = self._preset_combo.currentText()
+        if name == "-- Nenhum preset --":
+            self._save_preset_as()
+            return
+        self._presets[name] = self._get_current_config()
+        save_presets(self._presets)
+        self._update_preset_summary(name)
+        self.signals.status_changed.emit(f"Preset '{name}' atualizado")
+
+    def _save_preset_as(self):
+        """Save current config as a new preset."""
+        name, ok = QInputDialog.getText(self, "Salvar como", "Nome do novo preset:")
         if ok and name.strip():
             name = name.strip()
             self._presets[name] = self._get_current_config()
             save_presets(self._presets)
-            # Update combo
             if self._preset_combo.findText(name) < 0:
                 self._preset_combo.addItem(name)
             self._preset_combo.setCurrentText(name)
-            self.signals.status_changed.emit(f"Preset '{name}' salvo")
+            self._update_preset_summary(name)
+            self.signals.status_changed.emit(f"Preset '{name}' criado")
+
+    def _update_preset_summary(self, name):
+        """Show a summary of the selected preset."""
+        if name not in self._presets:
+            self._preset_summary.setText("")
+            return
+        cfg = self._presets[name]
+        modes = []
+        if cfg.get("subtitle"): modes.append("Legenda")
+        if cfg.get("audio_in"): modes.append("Audio In")
+        if cfg.get("mic_out"): modes.append("Mic Out")
+        self._preset_summary.setText(
+            f"{cfg.get('lang_in', '?')} -> {cfg.get('lang_out', '?')}  |  "
+            f"{', '.join(modes) if modes else 'Nenhum modo'}  |  "
+            f"Vol: {cfg.get('original_vol', '?')}% / {cfg.get('tts_vol', '?')}%  |  "
+            f"Vel: {cfg.get('tts_speed', '?')}"
+        )
 
     def _delete_preset(self):
         name = self._preset_combo.currentText()
-        if name == "-- Selecionar --":
+        if name == "-- Nenhum preset --":
             return
         if name in self._presets:
             del self._presets[name]
@@ -1343,7 +1441,7 @@ class TranslatorWindow(QMainWindow):
 
         # Header
         preset_name = self._preset_combo.currentText()
-        preset_tag = preset_name if preset_name != "-- Selecionar --" else "Manual"
+        preset_tag = preset_name if preset_name != "-- Nenhum preset --" else "Manual"
         modes = []
         if self._btn_subtitle.isChecked(): modes.append("Legenda")
         if self._btn_audio_in.isChecked(): modes.append("Audio In")
