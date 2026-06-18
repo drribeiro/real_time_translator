@@ -49,9 +49,13 @@ class TextToSpeech:
         self.openai_voice = openai_voice
         self._openai_client = None
 
+        self._openai_failures = 0  # track consecutive failures
         if engine == "openai" and openai_api_key:
             import openai
-            self._openai_client = openai.OpenAI(api_key=openai_api_key)
+            self._openai_client = openai.OpenAI(
+                api_key=openai_api_key,
+                timeout=5.0,  # 5s timeout to avoid freezing
+            )
 
     def speak(self, text: str):
         """Speak text through system audio (blocking)."""
@@ -122,8 +126,11 @@ class TextToSpeech:
 
     def _synthesize_openai(self, text: str) -> tuple[np.ndarray | None, int]:
         """Generate audio via OpenAI TTS. Returns (float32_array, sample_rate)."""
+        # If too many consecutive failures, skip OpenAI entirely
+        if self._openai_failures >= 3:
+            return self._synthesize_macos(text)
+
         try:
-            # Map rate 100-400 to OpenAI speed 0.5-2.0
             speed = 0.5 + (self.rate - 100) / (400 - 100) * 1.5
             speed = max(0.25, min(4.0, speed))
 
@@ -131,15 +138,20 @@ class TextToSpeech:
                 model="tts-1",
                 voice=self.openai_voice,
                 input=text,
-                response_format="pcm",  # raw 24kHz 16-bit mono PCM
+                response_format="pcm",
                 speed=speed,
             )
 
             audio_bytes = response.content
             data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32767.0
-            return data, 24000  # OpenAI PCM is 24kHz
+            self._openai_failures = 0  # reset on success
+            return data, 24000
         except Exception as e:
-            print(f"[TTS OpenAI Error] {e}, falling back to macOS say")
+            self._openai_failures += 1
+            if self._openai_failures >= 3:
+                print(f"[TTS] OpenAI failed {self._openai_failures}x, switching to macOS say")
+            else:
+                print(f"[TTS OpenAI Error] {e}, falling back to macOS say")
             return self._synthesize_macos(text)
 
     def _speak_openai(self, text: str):

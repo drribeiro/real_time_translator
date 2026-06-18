@@ -84,13 +84,13 @@ class RealtimeTranscriber:
         print(f"[Transcriber] Error: {error}")
 
     def send(self, audio_bytes: bytes):
-        """Send raw PCM audio bytes to Deepgram."""
-        if self._connection and audio_bytes:
-            try:
-                self._connection.send_media(audio_bytes)
-            except Exception as e:
-                if self._running:
-                    print(f"[Transcriber] Send error: {e}")
+        """Send raw PCM audio bytes to Deepgram. Silently drops on error."""
+        if not self._connection or not audio_bytes or not self._running:
+            return
+        try:
+            self._connection.send_media(audio_bytes)
+        except Exception:
+            pass  # Don't spam errors — connection may be reconnecting
 
     def stop(self):
         """Close the connection."""

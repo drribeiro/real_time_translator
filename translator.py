@@ -10,20 +10,35 @@ class TextTranslator:
 
     def __init__(self, api_key: str = DEEPL_API_KEY,
                  source_lang: str = "EN", target_lang: str = "PT-BR"):
-        self.translator = deepl.Translator(api_key)
+        self.translator = deepl.Translator(
+            api_key,
+            send_platform_info=False,
+        )
         self.source_lang = source_lang
         self.target_lang = target_lang
+        self._last_text = ""
+        self._last_result = ""
 
     def translate(self, text: str) -> str:
-        """Translate text. Returns translated string."""
+        """Translate text. Returns translated string. Never blocks forever."""
         if not text.strip():
             return ""
-        result = self.translator.translate_text(
-            text,
-            source_lang=self.source_lang,
-            target_lang=self.target_lang,
-        )
-        return result.text
+        # Skip if same text as last (debounce repeated interim results)
+        if text == self._last_text:
+            return self._last_result
+        try:
+            result = self.translator.translate_text(
+                text,
+                source_lang=self.source_lang,
+                target_lang=self.target_lang,
+            )
+            self._last_text = text
+            self._last_result = result.text
+            return result.text
+        except Exception as e:
+            print(f"[Translator Error] {e}")
+            # Return original text if translation fails
+            return f"[!] {text}"
 
     def swap_languages(self):
         """Swap source and target languages."""
