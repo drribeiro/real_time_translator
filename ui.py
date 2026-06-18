@@ -47,7 +47,7 @@ class ToggleSwitch(QWidget):
         self._label = label
         self._knob_x = 1.0 if not checked else 20.0
         self._anim = None
-        self.setFixedSize(self._calc_width(), 28)
+        self.setFixedSize(self._calc_width(), 32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def _calc_width(self):
@@ -1421,7 +1421,11 @@ class TranslatorWindow(QMainWindow):
         mic_out = self._btn_mic_out.isChecked()
 
         if not subtitle and not audio_in and not mic_out:
-            self.signals.status_changed.emit("Selecione pelo menos um modo")
+            QMessageBox.warning(
+                self, "Nenhuma funcao selecionada",
+                "Ative pelo menos uma funcao antes de iniciar:\n"
+                "Legenda, Audio In ou Mic Out"
+            )
             return
 
         # Ask to clear subtitle area if it has content
