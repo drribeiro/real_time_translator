@@ -36,6 +36,77 @@ SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
 ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
 
 
+class AudioLevelMeter(QWidget):
+    """Animated audio level meter with bouncing bars."""
+
+    def __init__(self, color="#00cc66", label="", bar_count=12, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self._label = label
+        self._level = 0.0  # 0.0 to 1.0
+        self._peak = 0.0
+        self._bar_count = bar_count
+        self.setFixedHeight(28)
+        self.setMinimumWidth(120)
+
+    def set_level(self, level: float):
+        """Set level 0.0 to 1.0."""
+        self._level = max(0.0, min(1.0, level))
+        self._peak = max(self._level, self._peak * 0.95)  # slow peak decay
+        self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+
+        # Label
+        label_w = 0
+        if self._label:
+            p.setPen(QPen(QColor("#888")))
+            p.setFont(QFont("SF Pro", 9))
+            label_w = p.fontMetrics().horizontalAdvance(self._label) + 6
+            p.drawText(0, h // 2 + 4, self._label)
+
+        # Bars area
+        bar_area_w = w - label_w
+        bar_w = max(2, (bar_area_w - (self._bar_count - 1) * 2) // self._bar_count)
+        bar_h = h - 4
+        active_bars = int(self._level * self._bar_count)
+        peak_bar = int(self._peak * self._bar_count)
+
+        for i in range(self._bar_count):
+            x = label_w + i * (bar_w + 2)
+            rect = QRectF(x, 2, bar_w, bar_h)
+
+            if i < active_bars:
+                # Color gradient: green -> yellow -> red
+                t = i / self._bar_count
+                if t < 0.6:
+                    c = self._color
+                elif t < 0.8:
+                    c = QColor("#f1c40f")
+                else:
+                    c = QColor("#e74c3c")
+                p.setBrush(QBrush(c))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRoundedRect(rect, 2, 2)
+            else:
+                # Inactive bar
+                p.setBrush(QBrush(QColor("#2a2a30")))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRoundedRect(rect, 2, 2)
+
+            # Peak indicator
+            if i == peak_bar and peak_bar > 0:
+                p.setBrush(QBrush(QColor(255, 255, 255, 180)))
+                p.drawRoundedRect(QRectF(x, 2, bar_w, 3), 1, 1)
+
+        p.end()
+
+
 class ToggleSwitch(QWidget):
     """macOS-style toggle switch widget."""
     toggled = pyqtSignal(bool)
@@ -139,6 +210,8 @@ class PipelineSignals(QObject):
     new_subtitle = pyqtSignal(str, str, str)  # (original, translated, source)
     status_changed = pyqtSignal(str)
     error = pyqtSignal(str)
+    audio_level = pyqtSignal(float)   # incoming audio level 0-1
+    mic_level = pyqtSignal(float)     # mic audio level 0-1
 
 
 class SettingsDialog(QDialog):
@@ -928,6 +1001,19 @@ class TranslatorWindow(QMainWindow):
         self._preset_summary.setWordWrap(True)
         ps.addWidget(self._preset_summary)
 
+        # Audio level meters
+        meters_row = QHBoxLayout()
+        meters_row.setSpacing(16)
+
+        self._audio_meter = AudioLevelMeter(color="#00cc66", label="Audio")
+        meters_row.addWidget(self._audio_meter)
+
+        self._mic_meter = AudioLevelMeter(color="#e74c3c", label="Mic")
+        meters_row.addWidget(self._mic_meter)
+
+        meters_row.addStretch()
+        ps.addLayout(meters_row)
+
         layout.addWidget(preset_section)
 
         layout.addWidget(self._sep())
@@ -1276,6 +1362,8 @@ class TranslatorWindow(QMainWindow):
         self.signals.new_subtitle.connect(self._add_subtitle)
         self.signals.status_changed.connect(self._set_status)
         self.signals.error.connect(self._set_error)
+        self.signals.audio_level.connect(self._audio_meter.set_level)
+        self.signals.mic_level.connect(self._mic_meter.set_level)
 
     def _add_subtitle(self, original, translated, source="AUDIO"):
         src = self._lang_in.currentText()[:2].upper()
@@ -1720,7 +1808,7 @@ class TranslatorWindow(QMainWindow):
                         self._start_passthrough(output_dev)
                         self._incoming_capture.start(self._on_audio_data)
                     else:
-                        self._incoming_capture.start(self._incoming_transcriber.send)
+                        self._incoming_capture.start(self._on_audio_data_subtitle_only)
 
                 # --- OUTGOING PATH ---
                 if mic_out:
@@ -1749,7 +1837,7 @@ class TranslatorWindow(QMainWindow):
                     self._outgoing_capture.block_size = 4096
                     self._outgoing_capture.stream = None
                     self._outgoing_capture._callback = None
-                    self._outgoing_capture.start(self._outgoing_transcriber.send)
+                    self._outgoing_capture.start(self._on_mic_data)
 
                 # Status
                 self._set_dot("#00cc66")
@@ -1787,21 +1875,45 @@ class TranslatorWindow(QMainWindow):
                 pass
             self._passthrough_stream = None
 
+    def _on_audio_data_subtitle_only(self, audio_bytes):
+        """Audio callback for subtitle-only mode (no passthrough)."""
+        if self._incoming_transcriber:
+            self._incoming_transcriber.send(audio_bytes)
+        # Emit level
+        data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        rms = np.sqrt(np.mean(data ** 2))
+        self.signals.audio_level.emit(min(1.0, rms / 10000.0))
+
     def _on_audio_data(self, audio_bytes):
+        """Audio callback for audio-in mode (with passthrough)."""
         if self._incoming_transcriber:
             self._incoming_transcriber.send(audio_bytes)
 
+        # Calculate and emit audio level
+        data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        rms = np.sqrt(np.mean(data ** 2))
+        self.signals.audio_level.emit(min(1.0, rms / 10000.0))
+
         vol = self._original_vol / 100.0
         if vol > 0 and self._passthrough_stream:
-            data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32767.0
-            data = (data * vol).reshape(-1, 1)
+            normalized = (data / 32767.0 * vol).reshape(-1, 1)
             try:
-                self._passthrough_stream.write(data)
+                self._passthrough_stream.write(normalized)
             except Exception:
                 pass
 
+    def _on_mic_data(self, audio_bytes):
+        """Mic audio callback — sends to transcriber + emits level."""
+        if self._outgoing_transcriber:
+            self._outgoing_transcriber.send(audio_bytes)
+        data = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        rms = np.sqrt(np.mean(data ** 2))
+        self.signals.mic_level.emit(min(1.0, rms / 10000.0))
+
     def _stop_pipeline(self):
         self._stop_passthrough()
+        self._audio_meter.set_level(0)
+        self._mic_meter.set_level(0)
 
         if self._incoming_capture:
             self._incoming_capture.stop()
