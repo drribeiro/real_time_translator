@@ -52,9 +52,12 @@ class ToggleSwitch(QWidget):
 
     def _calc_width(self):
         if self._label:
-            fm = self.fontMetrics()
+            font = QFont("SF Pro", 12)
+            font.setBold(True)
+            from PyQt6.QtGui import QFontMetrics
+            fm = QFontMetrics(font)
             text_w = fm.horizontalAdvance(self._label)
-            return 44 + 10 + text_w
+            return 44 + 14 + text_w + 4
         return 44
 
     def isChecked(self):
@@ -739,8 +742,8 @@ class TranslatorWindow(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumSize(760, 640)
-        self.resize(820, 700)
+        self.setMinimumSize(880, 700)
+        self.resize(920, 760)
 
         central = QWidget()
         central.setObjectName("central")
@@ -936,72 +939,75 @@ class TranslatorWindow(QMainWindow):
 
         # Speaker Original
         v1 = QHBoxLayout()
-        v1.setSpacing(12)
+        v1.setSpacing(16)
         v1_label = QLabel("Speaker Original")
         v1_label.setStyleSheet("color: #e07c3a; font-size: 14px; font-weight: bold;")
-        v1_label.setFixedWidth(170)
-        v1.addWidget(v1_label)
+        v1_label.setMinimumWidth(160)
+        v1.addWidget(v1_label, 0)
 
         self._vol_original = QSlider(Qt.Orientation.Horizontal)
         self._vol_original.setRange(0, 100)
         self._vol_original.setValue(self._original_vol)
+        self._vol_original.setFixedHeight(28)
         self._vol_original.setStyleSheet(self._slider_style("#e07c3a"))
         self._vol_original.valueChanged.connect(self._on_original_vol_changed)
-        v1.addWidget(self._vol_original)
+        v1.addWidget(self._vol_original, 1)
 
         self._vol_original_lbl = QLabel(f"{self._original_vol}%")
         self._vol_original_lbl.setStyleSheet("color: #e07c3a; font-size: 14px; font-weight: bold;")
         self._vol_original_lbl.setFixedWidth(45)
         self._vol_original_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        v1.addWidget(self._vol_original_lbl)
+        v1.addWidget(self._vol_original_lbl, 0)
 
         self._mute_original_btn = ToggleSwitch("Mute", "#c0392b", checked=True)
         self._mute_original_btn.toggled.connect(lambda _: self._on_mute_original())
-        v1.addWidget(self._mute_original_btn)
+        v1.addWidget(self._mute_original_btn, 0)
         vs.addLayout(v1)
 
         # Voz Tradutor
         v2 = QHBoxLayout()
-        v2.setSpacing(12)
+        v2.setSpacing(16)
         v2_label = QLabel("Voz Tradutor")
         v2_label.setStyleSheet("color: #2d8cf0; font-size: 14px; font-weight: bold;")
-        v2_label.setFixedWidth(170)
-        v2.addWidget(v2_label)
+        v2_label.setMinimumWidth(160)
+        v2.addWidget(v2_label, 0)
 
         self._vol_tts = QSlider(Qt.Orientation.Horizontal)
         self._vol_tts.setRange(0, 100)
         self._vol_tts.setValue(self._tts_vol)
+        self._vol_tts.setFixedHeight(28)
         self._vol_tts.setStyleSheet(self._slider_style("#2d8cf0"))
         self._vol_tts.valueChanged.connect(self._on_tts_vol_changed)
-        v2.addWidget(self._vol_tts)
+        v2.addWidget(self._vol_tts, 1)
 
         self._vol_tts_lbl = QLabel(f"{self._tts_vol}%")
         self._vol_tts_lbl.setStyleSheet("color: #2d8cf0; font-size: 14px; font-weight: bold;")
         self._vol_tts_lbl.setFixedWidth(45)
         self._vol_tts_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        v2.addWidget(self._vol_tts_lbl)
+        v2.addWidget(self._vol_tts_lbl, 0)
         vs.addLayout(v2)
 
         # Velocidade
         v3 = QHBoxLayout()
-        v3.setSpacing(12)
+        v3.setSpacing(16)
         v3_label = QLabel("Velocidade da Fala")
         v3_label.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
-        v3_label.setFixedWidth(170)
-        v3.addWidget(v3_label)
+        v3_label.setMinimumWidth(160)
+        v3.addWidget(v3_label, 0)
 
         self._speed_slider = QSlider(Qt.Orientation.Horizontal)
         self._speed_slider.setRange(100, 400)
         self._speed_slider.setValue(self._tts_speed)
+        self._speed_slider.setFixedHeight(28)
         self._speed_slider.setStyleSheet(self._slider_style("#27ae60"))
         self._speed_slider.valueChanged.connect(self._on_speed_changed)
-        v3.addWidget(self._speed_slider)
+        v3.addWidget(self._speed_slider, 1)
 
         self._speed_lbl = QLabel(f"{self._tts_speed}")
         self._speed_lbl.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
         self._speed_lbl.setFixedWidth(45)
         self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        v3.addWidget(self._speed_lbl)
+        v3.addWidget(self._speed_lbl, 0)
         vs.addLayout(v3)
 
         layout.addWidget(vol_section)
@@ -1016,8 +1022,9 @@ class TranslatorWindow(QMainWindow):
         acts.setSpacing(12)
 
         # Mode toggles
+        # Modes row
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(20)
+        mode_row.setSpacing(24)
 
         self._btn_subtitle = ToggleSwitch("Legenda", "#2d8cf0")
         mode_row.addWidget(self._btn_subtitle)
@@ -1028,16 +1035,21 @@ class TranslatorWindow(QMainWindow):
         self._btn_mic_out = ToggleSwitch("Mic Out", "#8e44ad")
         mode_row.addWidget(self._btn_mic_out)
 
-        mode_row.addSpacing(24)
-
-        self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085")
-        mode_row.addWidget(self._chk_save_transcription)
-
-        self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085")
-        mode_row.addWidget(self._chk_save_translation)
-
         mode_row.addStretch()
         acts.addLayout(mode_row)
+
+        # Save row
+        save_row = QHBoxLayout()
+        save_row.setSpacing(24)
+
+        self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085")
+        save_row.addWidget(self._chk_save_transcription)
+
+        self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085")
+        save_row.addWidget(self._chk_save_translation)
+
+        save_row.addStretch()
+        acts.addLayout(save_row)
 
         # Start / Pause buttons
         btn_row = QHBoxLayout()
