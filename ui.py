@@ -905,7 +905,6 @@ class FloatingSubtitle(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
             | Qt.WindowType.WindowDoesNotAcceptFocus
-            | Qt.WindowType.BypassWindowManagerHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
@@ -955,6 +954,28 @@ class FloatingSubtitle(QMainWindow):
         # Enable resize from edges
         self._resize_edge = None
         self._resize_margin = 8
+
+    def show(self):
+        super().show()
+        self._set_macos_top_level()
+
+    def _set_macos_top_level(self):
+        """Use Cocoa API to set window above everything, including fullscreen."""
+        try:
+            from AppKit import NSApp, NSFloatingWindowLevel, NSScreenSaverWindowLevel
+            # Get the NSWindow for this QWidget
+            view = self.winId().__int__()
+            for window in NSApp.windows():
+                if window.windowNumber() == self.winId().__int__():
+                    # Level 25 = above screensaver, above everything
+                    window.setLevel_(NSScreenSaverWindowLevel + 1)
+                    window.setCollectionBehavior_(
+                        1 << 0   # canJoinAllSpaces
+                        | 1 << 4  # fullScreenAuxiliary
+                    )
+                    break
+        except Exception:
+            pass
 
     def update_text(self, original: str, translated: str):
         self._lines.append((original, translated))
