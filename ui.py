@@ -847,14 +847,9 @@ class TranslatorWindow(QMainWindow):
         self._vol_original_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         v1.addWidget(self._vol_original_lbl)
 
-        self._mute_original_btn = QPushButton("MUTE")
-        self._mute_original_btn.setCheckable(True)
+        self._mute_original_btn = self._toggle_btn("MUTE", "#c0392b")
         self._mute_original_btn.setChecked(True)
-        self._mute_original_btn.setFixedSize(56, 28)
-        self._mute_original_btn.setStyleSheet(
-            "QPushButton { background: #c0392b; color: white; border: none; border-radius: 6px; font-size: 10px; font-weight: bold; }"
-            "QPushButton:!checked { background: #444; color: #888; }"
-        )
+        self._mute_original_btn.setFixedWidth(70)
         self._mute_original_btn.clicked.connect(self._on_mute_original)
         v1.addWidget(self._mute_original_btn)
         vs.addLayout(v1)
