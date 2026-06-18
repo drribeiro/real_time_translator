@@ -12,10 +12,10 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTextEdit, QSlider, QComboBox, QFrame,
     QCheckBox, QInputDialog, QMessageBox, QLineEdit, QDialog,
-    QFormLayout, QDialogButtonBox, QGroupBox,
+    QFormLayout, QDialogButtonBox, QGroupBox, QSystemTrayIcon, QMenu,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QAction
 
 import sounddevice as sd
 from config import (
@@ -233,6 +233,71 @@ class SettingsDialog(QDialog):
         return self._openai_voice_combo.currentText()
 
 
+class FloatingSubtitle(QMainWindow):
+    """Transparent floating subtitle overlay that shows on screen."""
+
+    def __init__(self):
+        super().__init__()
+        self._drag_pos = None
+        self.setWindowFlags(
+            Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMinimumWidth(500)
+        self.resize(700, 80)
+
+        # Position at bottom center of screen
+        screen = QApplication.primaryScreen().geometry()
+        self.move(
+            (screen.width() - 700) // 2,
+            screen.height() - 140,
+        )
+
+        central = QWidget()
+        central.setObjectName("floatingSub")
+        self.setCentralWidget(central)
+
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 8, 16, 8)
+
+        self._original_label = QLabel("")
+        self._original_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._original_label.setWordWrap(True)
+        self._original_label.setStyleSheet("color: rgba(200,200,200,0.7); font-size: 13px;")
+        layout.addWidget(self._original_label)
+
+        self._translated_label = QLabel("")
+        self._translated_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._translated_label.setWordWrap(True)
+        self._translated_label.setStyleSheet("color: rgba(255,255,255,0.95); font-size: 18px; font-weight: bold;")
+        layout.addWidget(self._translated_label)
+
+        self.setStyleSheet("""
+            #floatingSub {
+                background: rgba(0, 0, 0, 0.65);
+                border-radius: 12px;
+            }
+        """)
+
+    def update_text(self, original: str, translated: str):
+        self._original_label.setText(original)
+        self._translated_label.setText(translated)
+        self.adjustSize()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = e.globalPosition().toPoint() - self.pos()
+
+    def mouseMoveEvent(self, e):
+        if self._drag_pos and e.buttons() & Qt.MouseButton.LeftButton:
+            self.move(e.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, e):
+        self._drag_pos = None
+
+
 def load_presets() -> dict:
     if os.path.exists(PRESETS_FILE):
         with open(PRESETS_FILE) as f:
@@ -281,6 +346,9 @@ class TranslatorWindow(QMainWindow):
         self._tts_out = None
         self._tts_lock = threading.Lock()
         self._passthrough_stream = None
+
+        # Floating subtitle overlay
+        self._floating_sub = FloatingSubtitle()
 
         # Presets
         self._presets = load_presets()
@@ -723,6 +791,12 @@ class TranslatorWindow(QMainWindow):
         bar = self._subtitle_area.verticalScrollBar()
         bar.setValue(bar.maximum())
 
+        # Update floating subtitle
+        self._floating_sub.update_text(
+            f"[{src}] {original}",
+            f"[{tgt}] {translated}",
+        )
+
         # Log to file
         self._log_entry(src, original, tgt, translated)
 
@@ -913,6 +987,9 @@ class TranslatorWindow(QMainWindow):
         self._set_controls_enabled(False)
 
         self._start_pipeline()
+        self._floating_sub.show()
+        self._update_tray_icon()
+        self._rebuild_tray_menu()
 
     def _stop_all(self):
         self._running = False
@@ -923,6 +1000,7 @@ class TranslatorWindow(QMainWindow):
 
         self._stop_pipeline()
         self._close_log_file()
+        self._floating_sub.hide()
 
         # Ask to clear subtitle area
         if self._subtitle_area.toPlainText().strip():
@@ -945,6 +1023,8 @@ class TranslatorWindow(QMainWindow):
         self._set_controls_enabled(True)
         self._set_dot("#666")
         self.signals.status_changed.emit("Pronto — configure e clique INICIAR")
+        self._update_tray_icon()
+        self._rebuild_tray_menu()
 
     def _set_controls_enabled(self, enabled):
         self._lang_in.setEnabled(enabled)
@@ -1194,26 +1274,137 @@ class TranslatorWindow(QMainWindow):
             except Exception as e:
                 self.signals.error.emit(f"TTS: {e}")
 
+    # ==================== SYSTEM TRAY ====================
+
+    def setup_tray(self):
+        """Create system tray icon with menu."""
+        self._tray = QSystemTrayIcon(self)
+        self._tray.setIcon(self._create_tray_icon("#2d8cf0"))
+        self._tray.setToolTip("RealtimeTranslator")
+        self._tray.activated.connect(self._on_tray_activated)
+
+        self._rebuild_tray_menu()
+        self._tray.show()
+
+    def _create_tray_icon(self, color):
+        """Create a simple colored circle icon for the tray."""
+        px = QPixmap(32, 32)
+        px.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(px)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QColor(color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(4, 4, 24, 24)
+        # "T" letter
+        painter.setPen(QColor("white"))
+        font = QFont("Arial", 14, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, "T")
+        painter.end()
+        return QIcon(px)
+
+    def _rebuild_tray_menu(self):
+        """Rebuild the tray right-click menu with current presets."""
+        menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu { background: #2a2a2e; color: #ddd; border: 1px solid #444; padding: 4px; }
+            QMenu::item { padding: 6px 20px; }
+            QMenu::item:selected { background: #2d8cf0; }
+            QMenu::separator { height: 1px; background: #444; margin: 4px 8px; }
+        """)
+
+        # Show/Hide window
+        show_action = menu.addAction("Mostrar janela")
+        show_action.triggered.connect(self._show_window)
+
+        menu.addSeparator()
+
+        # Status
+        if self._running:
+            status = menu.addAction("● Ativo")
+            status.setEnabled(False)
+
+            stop_action = menu.addAction("Parar")
+            stop_action.triggered.connect(self._stop_all)
+        else:
+            status = menu.addAction("○ Inativo")
+            status.setEnabled(False)
+
+        menu.addSeparator()
+
+        # Presets
+        presets_menu = menu.addMenu("Presets")
+        if self._presets:
+            for name in self._presets:
+                action = presets_menu.addAction(name)
+                action.triggered.connect(lambda checked, n=name: self._activate_preset_from_tray(n))
+        else:
+            no_presets = presets_menu.addAction("(nenhum salvo)")
+            no_presets.setEnabled(False)
+
+        menu.addSeparator()
+
+        # Quit
+        quit_action = menu.addAction("Sair")
+        quit_action.triggered.connect(self._quit_app)
+
+        self._tray.setContextMenu(menu)
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self._show_window()
+
+    def _show_window(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _activate_preset_from_tray(self, preset_name):
+        """Load a preset and start from tray menu."""
+        if preset_name in self._presets:
+            self._apply_config(self._presets[preset_name])
+            if not self._running:
+                self._start_all()
+            self._rebuild_tray_menu()
+
+    def _update_tray_icon(self):
+        """Update tray icon color based on state."""
+        if self._running:
+            self._tray.setIcon(self._create_tray_icon("#00cc66"))
+            self._tray.setToolTip("RealtimeTranslator — Ativo")
+        else:
+            self._tray.setIcon(self._create_tray_icon("#2d8cf0"))
+            self._tray.setToolTip("RealtimeTranslator")
+
     # ==================== CLOSE ====================
 
     def _on_close(self):
-        self._stop_pipeline()
-        self._close_log_file()
-        self._router.restore()
-        QApplication.quit()
+        """Close button hides to tray instead of quitting."""
+        self.hide()
 
     def closeEvent(self, event):
+        """Window close hides to tray."""
+        event.ignore()
+        self.hide()
+
+    def _quit_app(self):
+        """Actually quit the app (from tray menu)."""
         self._stop_pipeline()
         self._close_log_file()
         self._router.restore()
-        event.accept()
+        self._tray.hide()
+        QApplication.quit()
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("RealtimeTranslator")
+    app.setQuitOnLastWindowClosed(False)  # Keep running in tray
+
     window = TranslatorWindow()
+    window.setup_tray()
     window.show()
+
     sys.exit(app.exec())
 
 

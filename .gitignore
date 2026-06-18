@@ -5,3 +5,7 @@ __pycache__/
 sessions/
 presets.json
 .DS_Store
+build/
+dist/
+*.spec
+icon.iconset/
