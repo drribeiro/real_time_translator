@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
     QFormLayout, QDialogButtonBox, QGroupBox, QSystemTrayIcon, QMenu,
     QTabWidget, QFileDialog, QListWidget, QListWidgetItem,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QRectF, QPropertyAnimation, pyqtProperty, QEasingCurve
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QColor, QAction, QBrush, QPen
 
 import sounddevice as sd
 from config import (
@@ -34,6 +34,102 @@ from dotenv import load_dotenv, set_key
 PRESETS_FILE = os.path.join(os.path.dirname(__file__), "presets.json")
 SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
 ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
+
+
+class ToggleSwitch(QWidget):
+    """macOS-style toggle switch widget."""
+    toggled = pyqtSignal(bool)
+
+    def __init__(self, label="", color="#2d8cf0", checked=False, parent=None):
+        super().__init__(parent)
+        self._checked = checked
+        self._color = QColor(color)
+        self._label = label
+        self._knob_x = 1.0 if not checked else 20.0
+        self._anim = None
+        self.setFixedSize(self._calc_width(), 28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _calc_width(self):
+        if self._label:
+            fm = self.fontMetrics()
+            text_w = fm.horizontalAdvance(self._label)
+            return 44 + 10 + text_w
+        return 44
+
+    def isChecked(self):
+        return self._checked
+
+    def setChecked(self, val):
+        if self._checked == val:
+            return
+        self._checked = val
+        self._animate()
+
+    def setEnabled(self, val):
+        super().setEnabled(val)
+        self.update()
+
+    def _get_knob_x(self):
+        return self._knob_x
+
+    def _set_knob_x(self, val):
+        self._knob_x = val
+        self.update()
+
+    knob_position = pyqtProperty(float, _get_knob_x, _set_knob_x)
+
+    def _animate(self):
+        self._anim = QPropertyAnimation(self, b"knob_position")
+        self._anim.setDuration(150)
+        self._anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._anim.setStartValue(self._knob_x)
+        self._anim.setEndValue(20.0 if self._checked else 1.0)
+        self._anim.start()
+
+    def mousePressEvent(self, e):
+        if not self.isEnabled():
+            return
+        self._checked = not self._checked
+        self._animate()
+        self.toggled.emit(self._checked)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Track
+        track_rect = QRectF(0, 2, 42, 24)
+        if self._checked and self.isEnabled():
+            p.setBrush(QBrush(self._color))
+        elif self.isEnabled():
+            p.setBrush(QBrush(QColor("#444")))
+        else:
+            p.setBrush(QBrush(QColor("#333")))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(track_rect, 12, 12)
+
+        # Knob
+        knob_y = 4.0
+        knob_size = 20.0
+        if self.isEnabled():
+            p.setBrush(QBrush(QColor("white")))
+        else:
+            p.setBrush(QBrush(QColor("#666")))
+        p.drawEllipse(QRectF(self._knob_x + 1, knob_y, knob_size, knob_size))
+
+        # Label
+        if self._label:
+            if self.isEnabled():
+                p.setPen(QPen(QColor("#ccc")))
+            else:
+                p.setPen(QPen(QColor("#555")))
+            font = QFont("SF Pro", 12)
+            font.setBold(True)
+            p.setFont(font)
+            p.drawText(54, 18, self._label)
+
+        p.end()
 
 
 class PipelineSignals(QObject):
@@ -831,8 +927,8 @@ class TranslatorWindow(QMainWindow):
         vol_section = QWidget()
         vol_section.setObjectName("configSection")
         vs = QVBoxLayout(vol_section)
-        vs.setContentsMargins(20, 16, 20, 16)
-        vs.setSpacing(22)
+        vs.setContentsMargins(24, 20, 24, 20)
+        vs.setSpacing(28)
 
         vs_title = QLabel("VOLUMES E VELOCIDADE")
         vs_title.setStyleSheet("color: #e07c3a; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
@@ -842,8 +938,8 @@ class TranslatorWindow(QMainWindow):
         v1 = QHBoxLayout()
         v1.setSpacing(12)
         v1_label = QLabel("Speaker Original")
-        v1_label.setStyleSheet("color: #e07c3a; font-size: 13px; font-weight: bold;")
-        v1_label.setFixedWidth(150)
+        v1_label.setStyleSheet("color: #e07c3a; font-size: 14px; font-weight: bold;")
+        v1_label.setFixedWidth(170)
         v1.addWidget(v1_label)
 
         self._vol_original = QSlider(Qt.Orientation.Horizontal)
@@ -854,15 +950,13 @@ class TranslatorWindow(QMainWindow):
         v1.addWidget(self._vol_original)
 
         self._vol_original_lbl = QLabel(f"{self._original_vol}%")
-        self._vol_original_lbl.setStyleSheet("color: #e07c3a; font-size: 13px; font-weight: bold;")
-        self._vol_original_lbl.setFixedWidth(40)
+        self._vol_original_lbl.setStyleSheet("color: #e07c3a; font-size: 14px; font-weight: bold;")
+        self._vol_original_lbl.setFixedWidth(45)
         self._vol_original_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         v1.addWidget(self._vol_original_lbl)
 
-        self._mute_original_btn = self._toggle_btn("MUTE", "#c0392b")
-        self._mute_original_btn.setChecked(True)
-        self._mute_original_btn.setFixedWidth(70)
-        self._mute_original_btn.clicked.connect(self._on_mute_original)
+        self._mute_original_btn = ToggleSwitch("Mute", "#c0392b", checked=True)
+        self._mute_original_btn.toggled.connect(lambda _: self._on_mute_original())
         v1.addWidget(self._mute_original_btn)
         vs.addLayout(v1)
 
@@ -870,8 +964,8 @@ class TranslatorWindow(QMainWindow):
         v2 = QHBoxLayout()
         v2.setSpacing(12)
         v2_label = QLabel("Voz Tradutor")
-        v2_label.setStyleSheet("color: #2d8cf0; font-size: 13px; font-weight: bold;")
-        v2_label.setFixedWidth(150)
+        v2_label.setStyleSheet("color: #2d8cf0; font-size: 14px; font-weight: bold;")
+        v2_label.setFixedWidth(170)
         v2.addWidget(v2_label)
 
         self._vol_tts = QSlider(Qt.Orientation.Horizontal)
@@ -882,8 +976,8 @@ class TranslatorWindow(QMainWindow):
         v2.addWidget(self._vol_tts)
 
         self._vol_tts_lbl = QLabel(f"{self._tts_vol}%")
-        self._vol_tts_lbl.setStyleSheet("color: #2d8cf0; font-size: 13px; font-weight: bold;")
-        self._vol_tts_lbl.setFixedWidth(40)
+        self._vol_tts_lbl.setStyleSheet("color: #2d8cf0; font-size: 14px; font-weight: bold;")
+        self._vol_tts_lbl.setFixedWidth(45)
         self._vol_tts_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         v2.addWidget(self._vol_tts_lbl)
         vs.addLayout(v2)
@@ -892,8 +986,8 @@ class TranslatorWindow(QMainWindow):
         v3 = QHBoxLayout()
         v3.setSpacing(12)
         v3_label = QLabel("Velocidade da Fala")
-        v3_label.setStyleSheet("color: #27ae60; font-size: 13px; font-weight: bold;")
-        v3_label.setFixedWidth(150)
+        v3_label.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
+        v3_label.setFixedWidth(170)
         v3.addWidget(v3_label)
 
         self._speed_slider = QSlider(Qt.Orientation.Horizontal)
@@ -904,8 +998,8 @@ class TranslatorWindow(QMainWindow):
         v3.addWidget(self._speed_slider)
 
         self._speed_lbl = QLabel(f"{self._tts_speed}")
-        self._speed_lbl.setStyleSheet("color: #27ae60; font-size: 13px; font-weight: bold;")
-        self._speed_lbl.setFixedWidth(40)
+        self._speed_lbl.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
+        self._speed_lbl.setFixedWidth(45)
         self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         v3.addWidget(self._speed_lbl)
         vs.addLayout(v3)
@@ -923,23 +1017,23 @@ class TranslatorWindow(QMainWindow):
 
         # Mode toggles
         mode_row = QHBoxLayout()
-        mode_row.setSpacing(10)
+        mode_row.setSpacing(20)
 
-        self._btn_subtitle = self._toggle_btn("Legenda", "#2d8cf0")
+        self._btn_subtitle = ToggleSwitch("Legenda", "#2d8cf0")
         mode_row.addWidget(self._btn_subtitle)
 
-        self._btn_audio_in = self._toggle_btn("Audio In", "#e07c3a")
+        self._btn_audio_in = ToggleSwitch("Audio In", "#e07c3a")
         mode_row.addWidget(self._btn_audio_in)
 
-        self._btn_mic_out = self._toggle_btn("Mic Out", "#8e44ad")
+        self._btn_mic_out = ToggleSwitch("Mic Out", "#8e44ad")
         mode_row.addWidget(self._btn_mic_out)
 
-        mode_row.addSpacing(20)
+        mode_row.addSpacing(24)
 
-        self._chk_save_transcription = self._toggle_btn("Salvar Transcricao", "#16a085")
+        self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085")
         mode_row.addWidget(self._chk_save_transcription)
 
-        self._chk_save_translation = self._toggle_btn("Salvar Traducao", "#16a085")
+        self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085")
         mode_row.addWidget(self._chk_save_translation)
 
         mode_row.addStretch()
@@ -1081,9 +1175,9 @@ class TranslatorWindow(QMainWindow):
 
     def _slider_style(self, color):
         return f"""
-            QSlider::groove:horizontal {{ height: 6px; background: #333; border-radius: 3px; }}
-            QSlider::handle:horizontal {{ width: 16px; height: 16px; margin: -5px 0; background: {color}; border-radius: 8px; }}
-            QSlider::sub-page:horizontal {{ background: {color}; border-radius: 3px; }}
+            QSlider::groove:horizontal {{ height: 8px; background: #333; border-radius: 4px; }}
+            QSlider::handle:horizontal {{ width: 20px; height: 20px; margin: -6px 0; background: {color}; border-radius: 10px; }}
+            QSlider::sub-page:horizontal {{ background: {color}; border-radius: 4px; }}
         """
 
     def _btn_style(self, off, on):
