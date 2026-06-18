@@ -743,9 +743,10 @@ class TranslatorWindow(QMainWindow):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         screen = QApplication.primaryScreen().geometry()
+        h = int(screen.height() * 0.90)
         self.setMinimumWidth(400)
-        self.resize(screen.width(), screen.height())
-        self.move(0, 0)
+        self.resize(screen.width(), h)
+        self.move(0, (screen.height() - h) // 2)
 
         central = QWidget()
         central.setObjectName("central")
