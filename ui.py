@@ -1089,7 +1089,13 @@ class TranslatorWindow(QMainWindow):
         func_row.setSpacing(16)
 
         self._btn_subtitle = ToggleSwitch("Legenda", "#2d8cf0")
+        self._btn_subtitle.toggled.connect(self._on_subtitle_toggled)
         func_row.addWidget(self._btn_subtitle)
+
+        self._btn_floating = ToggleSwitch("Legenda Flutuante", "#9b59b6")
+        self._btn_floating.setEnabled(False)
+        self._btn_floating.toggled.connect(self._on_floating_toggled)
+        func_row.addWidget(self._btn_floating)
 
         self._btn_audio_in = ToggleSwitch("Audio In", "#e07c3a")
         func_row.addWidget(self._btn_audio_in)
@@ -1314,6 +1320,7 @@ class TranslatorWindow(QMainWindow):
             "lang_out": self._lang_out.currentText(),
             "mic": self._mic_combo.currentText(),
             "subtitle": self._btn_subtitle.isChecked(),
+            "floating": self._btn_floating.isChecked(),
             "audio_in": self._btn_audio_in.isChecked(),
             "mic_out": self._btn_mic_out.isChecked(),
             "original_vol": self._vol_original.value(),
@@ -1334,6 +1341,9 @@ class TranslatorWindow(QMainWindow):
                 self._mic_combo.setCurrentIndex(idx)
         if "subtitle" in config:
             self._btn_subtitle.setChecked(config["subtitle"])
+            self._on_subtitle_toggled(config["subtitle"])
+        if "floating" in config:
+            self._btn_floating.setChecked(config["floating"])
         if "audio_in" in config:
             self._btn_audio_in.setChecked(config["audio_in"])
         if "mic_out" in config:
@@ -1450,6 +1460,23 @@ class TranslatorWindow(QMainWindow):
 
     # ==================== UI EVENTS ====================
 
+    def _on_subtitle_toggled(self, checked):
+        """When Legenda is toggled, enable/disable Legenda Flutuante."""
+        self._btn_floating.setEnabled(checked)
+        if checked:
+            self._btn_floating.setChecked(True)
+        else:
+            self._btn_floating.setChecked(False)
+            self._floating_sub.hide()
+
+    def _on_floating_toggled(self, checked):
+        """Show/hide floating subtitle."""
+        if checked:
+            self._floating_sub.show()
+        else:
+            self._floating_sub.hide()
+        self._rebuild_tray_menu()
+
     def _on_original_vol_changed(self, v):
         self._original_vol = v
         self._vol_original_lbl.setText(f"{v}%")
@@ -1536,7 +1563,8 @@ class TranslatorWindow(QMainWindow):
         self._set_controls_enabled(False)
 
         self._start_pipeline()
-        self._floating_sub.show()
+        if self._btn_floating.isChecked():
+            self._floating_sub.show()
         self._update_tray_icon()
         self._rebuild_tray_menu()
 
@@ -1549,7 +1577,6 @@ class TranslatorWindow(QMainWindow):
 
         self._stop_pipeline()
         self._close_log_file()
-        self._floating_sub.hide()
 
         # Ask to clear subtitle area
         if self._subtitle_area.toPlainText().strip():
