@@ -1830,14 +1830,15 @@ class TranslatorWindow(QMainWindow):
                     self._outgoing_transcriber.start()
                     time.sleep(0.5)
 
-                    self._outgoing_capture = AudioCapture.__new__(AudioCapture)
-                    self._outgoing_capture.device_index = mic_dev
-                    self._outgoing_capture.sample_rate = SAMPLE_RATE
-                    self._outgoing_capture.channels = 1
-                    self._outgoing_capture.block_size = 4096
-                    self._outgoing_capture.stream = None
-                    self._outgoing_capture._callback = None
-                    self._outgoing_capture.start(self._on_mic_data)
+                # Always capture mic for level meter (+ transcription if mic_out)
+                self._outgoing_capture = AudioCapture.__new__(AudioCapture)
+                self._outgoing_capture.device_index = mic_dev
+                self._outgoing_capture.sample_rate = SAMPLE_RATE
+                self._outgoing_capture.channels = 1
+                self._outgoing_capture.block_size = 4096
+                self._outgoing_capture.stream = None
+                self._outgoing_capture._callback = None
+                self._outgoing_capture.start(self._on_mic_data)
 
                 # Status
                 self._set_dot("#00cc66")
