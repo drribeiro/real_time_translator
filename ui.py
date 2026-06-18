@@ -871,7 +871,7 @@ class TranslatorWindow(QMainWindow):
 
         # Section title
         cs_title = QLabel("IDIOMAS E DISPOSITIVO")
-        cs_title.setStyleSheet("color: #27ae60; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        cs_title.setStyleSheet("color: #27ae60; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-bottom: 25px;")
         cs.addWidget(cs_title)
 
         # Language row
@@ -934,7 +934,7 @@ class TranslatorWindow(QMainWindow):
         vs.setSpacing(6)
 
         vs_title = QLabel("VOLUMES E VELOCIDADE")
-        vs_title.setStyleSheet("color: #e07c3a; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        vs_title.setStyleSheet("color: #e07c3a; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-bottom: 25px;")
         vs.addWidget(vs_title)
 
         # Speaker Original
@@ -1010,7 +1010,10 @@ class TranslatorWindow(QMainWindow):
         acts.setContentsMargins(20, 14, 20, 14)
         acts.setSpacing(12)
 
-        # Mode toggles
+        acts_title = QLabel("FUNCOES")
+        acts_title.setStyleSheet("color: #8e44ad; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-bottom: 25px;")
+        acts.addWidget(acts_title)
+
         # Modes row
         mode_row = QHBoxLayout()
         mode_row.setSpacing(24)
