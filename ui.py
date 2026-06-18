@@ -595,23 +595,27 @@ class SettingsDialog(QDialog):
 class FloatingSubtitle(QMainWindow):
     """Transparent floating subtitle overlay that shows on screen."""
 
+    MAX_LINES = 4
+
     def __init__(self):
         super().__init__()
         self._drag_pos = None
+        self._lines = []  # list of (original, translated)
         self.setWindowFlags(
             Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
+            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(500)
-        self.resize(700, 80)
 
-        # Position at bottom center of screen
         screen = QApplication.primaryScreen().geometry()
+        w = int(screen.width() * 0.75)
+        self.setMinimumSize(400, 100)
+        self.resize(w, 200)
         self.move(
-            (screen.width() - 700) // 2,
-            screen.height() - 140,
+            (screen.width() - w) // 2,
+            screen.height() - 250,
         )
 
         central = QWidget()
@@ -619,42 +623,116 @@ class FloatingSubtitle(QMainWindow):
         self.setCentralWidget(central)
 
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(16, 8, 16, 8)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(4)
 
-        self._original_label = QLabel("")
-        self._original_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._original_label.setWordWrap(True)
-        self._original_label.setStyleSheet("color: rgba(200,200,200,0.7); font-size: 13px;")
-        layout.addWidget(self._original_label)
+        self._text_area = QTextEdit()
+        self._text_area.setReadOnly(True)
+        self._text_area.setStyleSheet(
+            "QTextEdit { background: transparent; border: none; color: #fff; }"
+        )
+        self._text_area.setFont(QFont("SF Pro", 14))
+        self._text_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._text_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        layout.addWidget(self._text_area)
 
-        self._translated_label = QLabel("")
-        self._translated_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._translated_label.setWordWrap(True)
-        self._translated_label.setStyleSheet("color: rgba(255,255,255,0.95); font-size: 18px; font-weight: bold;")
-        layout.addWidget(self._translated_label)
+        # Resize grip at bottom-right
+        grip = QLabel()
+        grip.setFixedSize(16, 16)
+        grip.setStyleSheet("color: rgba(255,255,255,0.3); font-size: 12px;")
+        grip.setText("⟡")
+        grip.setAlignment(Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(grip, 0, Qt.AlignmentFlag.AlignRight)
 
         self.setStyleSheet("""
             #floatingSub {
-                background: rgba(0, 0, 0, 0.65);
-                border-radius: 12px;
+                background: rgba(0, 0, 0, 0.70);
+                border-radius: 14px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
             }
         """)
 
+        # Enable resize from edges
+        self._resize_edge = None
+        self._resize_margin = 8
+
     def update_text(self, original: str, translated: str):
-        self._original_label.setText(original)
-        self._translated_label.setText(translated)
-        self.adjustSize()
+        self._lines.append((original, translated))
+        if len(self._lines) > self.MAX_LINES:
+            self._lines = self._lines[-self.MAX_LINES:]
+        self._render_lines()
+
+    def _render_lines(self):
+        html = ""
+        for orig, trans in self._lines:
+            html += f'<p style="margin: 2px 0;"><span style="color: rgba(200,200,200,0.6); font-size: 12px;">{orig}</span></p>'
+            html += f'<p style="margin: 2px 0 8px 0;"><span style="color: rgba(255,255,255,0.95); font-size: 16px; font-weight: bold;">{trans}</span></p>'
+        self._text_area.setHtml(html)
+        sb = self._text_area.verticalScrollBar()
+        sb.setValue(sb.maximum())
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = e.globalPosition().toPoint() - self.pos()
+            edge = self._hit_test_edge(e.position())
+            if edge:
+                self._resize_edge = edge
+                self._drag_pos = e.globalPosition().toPoint()
+            else:
+                self._resize_edge = None
+                self._drag_pos = e.globalPosition().toPoint() - self.pos()
 
     def mouseMoveEvent(self, e):
-        if self._drag_pos and e.buttons() & Qt.MouseButton.LeftButton:
+        if not self._drag_pos:
+            # Update cursor on hover
+            edge = self._hit_test_edge(e.position())
+            if edge in ("left", "right"):
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif edge in ("top", "bottom"):
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+            elif edge:
+                self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            return
+
+        if self._resize_edge:
+            delta = e.globalPosition().toPoint() - self._drag_pos
+            self._drag_pos = e.globalPosition().toPoint()
+            geo = self.geometry()
+
+            if "right" in self._resize_edge:
+                geo.setRight(geo.right() + delta.x())
+            if "left" in self._resize_edge:
+                geo.setLeft(geo.left() + delta.x())
+            if "bottom" in self._resize_edge:
+                geo.setBottom(geo.bottom() + delta.y())
+            if "top" in self._resize_edge:
+                geo.setTop(geo.top() + delta.y())
+
+            if geo.width() >= self.minimumWidth() and geo.height() >= self.minimumHeight():
+                self.setGeometry(geo)
+        elif e.buttons() & Qt.MouseButton.LeftButton:
             self.move(e.globalPosition().toPoint() - self._drag_pos)
 
     def mouseReleaseEvent(self, e):
         self._drag_pos = None
+        self._resize_edge = None
+
+    def _hit_test_edge(self, pos):
+        m = self._resize_margin
+        w, h = self.width(), self.height()
+        x, y = pos.x(), pos.y()
+
+        edges = ""
+        if y < m:
+            edges += "top"
+        elif y > h - m:
+            edges += "bottom"
+        if x < m:
+            edges += "left"
+        elif x > w - m:
+            edges += "right"
+        return edges or None
 
 
 def load_presets() -> dict:
