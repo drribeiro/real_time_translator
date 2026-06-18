@@ -742,8 +742,12 @@ class TranslatorWindow(QMainWindow):
             | Qt.WindowType.FramelessWindowHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumSize(880, 700)
-        self.resize(920, 760)
+        screen = QApplication.primaryScreen().geometry()
+        w = int(screen.width() * 0.10)
+        h = screen.height()
+        self.setMinimumWidth(400)
+        self.resize(max(w, 400), h)
+        self.move(screen.width() - max(w, 400), 0)
 
         central = QWidget()
         central.setObjectName("central")
@@ -1014,34 +1018,27 @@ class TranslatorWindow(QMainWindow):
         acts_title.setStyleSheet("color: #8e44ad; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-bottom: 25px;")
         acts.addWidget(acts_title)
 
-        # Modes row
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(24)
+        # All toggles in one row
+        func_row = QHBoxLayout()
+        func_row.setSpacing(16)
 
         self._btn_subtitle = ToggleSwitch("Legenda", "#2d8cf0")
-        mode_row.addWidget(self._btn_subtitle)
+        func_row.addWidget(self._btn_subtitle)
 
         self._btn_audio_in = ToggleSwitch("Audio In", "#e07c3a")
-        mode_row.addWidget(self._btn_audio_in)
+        func_row.addWidget(self._btn_audio_in)
 
         self._btn_mic_out = ToggleSwitch("Mic Out", "#8e44ad")
-        mode_row.addWidget(self._btn_mic_out)
-
-        mode_row.addStretch()
-        acts.addLayout(mode_row)
-
-        # Save row
-        save_row = QHBoxLayout()
-        save_row.setSpacing(24)
+        func_row.addWidget(self._btn_mic_out)
 
         self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085")
-        save_row.addWidget(self._chk_save_transcription)
+        func_row.addWidget(self._chk_save_transcription)
 
         self._chk_save_translation = ToggleSwitch("Salvar Traducao", "#16a085")
-        save_row.addWidget(self._chk_save_translation)
+        func_row.addWidget(self._chk_save_translation)
 
-        save_row.addStretch()
-        acts.addLayout(save_row)
+        func_row.addStretch()
+        acts.addLayout(func_row)
 
         # Start / Pause buttons
         btn_row = QHBoxLayout()
