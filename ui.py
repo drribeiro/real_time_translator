@@ -1198,6 +1198,21 @@ class TranslatorWindow(QMainWindow):
         func_row.addStretch()
         acts.addLayout(func_row)
 
+        # Session label
+        label_row = QHBoxLayout()
+        label_row.setSpacing(10)
+        sess_label = QLabel("Nome da sessao:")
+        sess_label.setStyleSheet("color: #888; font-size: 12px;")
+        label_row.addWidget(sess_label)
+        self._session_name = QLineEdit()
+        self._session_name.setPlaceholderText("Ex: Reuniao com cliente, Daily standup...")
+        self._session_name.setStyleSheet(
+            "QLineEdit { background: #2a2a30; color: #ddd; border: 1px solid #444; "
+            "border-radius: 8px; padding: 8px 12px; font-size: 13px; }"
+        )
+        label_row.addWidget(self._session_name)
+        acts.addLayout(label_row)
+
         # Start / Pause buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
@@ -1700,6 +1715,7 @@ class TranslatorWindow(QMainWindow):
         self._chk_save_transcription.setEnabled(enabled)
         self._chk_save_translation.setEnabled(enabled)
         self._preset_combo.setEnabled(enabled)
+        self._session_name.setEnabled(enabled)
 
     def _get_selected_mic_index(self) -> int:
         mic_name = self._mic_combo.currentText()
@@ -1721,7 +1737,12 @@ class TranslatorWindow(QMainWindow):
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         src = self._lang_in.currentText()[:2]
         tgt = self._lang_out.currentText()[:2]
-        filename = f"{ts}_{src}-{tgt}.txt"
+        session_name = self._session_name.text().strip()
+        if session_name:
+            safe_session = "".join(c if c.isalnum() or c in " _-" else "_" for c in session_name).strip()
+            filename = f"{safe_session}_{ts}_{src}-{tgt}.txt"
+        else:
+            filename = f"{ts}_{src}-{tgt}.txt"
         path = os.path.join(sessions_dir, filename)
         self._log_file = open(path, "w", encoding="utf-8")
 
@@ -1734,6 +1755,8 @@ class TranslatorWindow(QMainWindow):
         if self._btn_mic_out.isChecked(): modes.append("Mic Out")
 
         self._log_file.write(f"# RealtimeTranslator Session\n")
+        if session_name:
+            self._log_file.write(f"# Sessao: {session_name}\n")
         self._log_file.write(f"# Data: {datetime.now().isoformat()}\n")
         self._log_file.write(f"# Preset: {preset_tag}\n")
         self._log_file.write(f"# Idiomas: {self._lang_in.currentText()} -> {self._lang_out.currentText()}\n")
