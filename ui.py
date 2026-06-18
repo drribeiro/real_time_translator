@@ -1513,6 +1513,13 @@ class TranslatorWindow(QMainWindow):
         sub_header.addWidget(sub_title)
         sub_header.addStretch()
 
+        # Interim indicator
+        self._interim_label = QLabel("")
+        self._interim_label.setStyleSheet("color: #555; font-size: 11px; font-style: italic;")
+        sub_header.addWidget(self._interim_label)
+
+        sub_header.addSpacing(12)
+
         self._btn_maximize = QPushButton("Maximizar")
         self._btn_maximize.setFixedHeight(24)
         self._btn_maximize.setStyleSheet(
@@ -1525,13 +1532,63 @@ class TranslatorWindow(QMainWindow):
 
         layout.addLayout(sub_header)
 
-        # ==================== SUBTITLE AREA ====================
-        self._subtitle_area = QTextEdit()
-        self._subtitle_area.setReadOnly(True)
-        self._subtitle_area.setObjectName("subtitleArea")
-        self._subtitle_area.setFont(QFont("SF Pro", 14))
-        self._subtitle_area.setMinimumHeight(120)
-        layout.addWidget(self._subtitle_area)
+        # ==================== SPLIT SUBTITLE AREA ====================
+        split_w = QWidget()
+        split_layout = QHBoxLayout(split_w)
+        split_layout.setContentsMargins(0, 0, 0, 0)
+        split_layout.setSpacing(2)
+
+        # Left: original language
+        left_w = QWidget()
+        left_l = QVBoxLayout(left_w)
+        left_l.setContentsMargins(0, 0, 0, 0)
+        left_l.setSpacing(0)
+
+        self._left_header = QLabel("ORIGINAL")
+        self._left_header.setFixedHeight(24)
+        self._left_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._left_header.setStyleSheet("background: #1a1a20; color: #666; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        left_l.addWidget(self._left_header)
+
+        self._subtitle_left = QTextEdit()
+        self._subtitle_left.setReadOnly(True)
+        self._subtitle_left.setObjectName("subtitleArea")
+        self._subtitle_left.setFont(QFont("SF Pro", 13))
+        left_l.addWidget(self._subtitle_left)
+
+        split_layout.addWidget(left_w)
+
+        # Divider
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setStyleSheet("color: #333;")
+        split_layout.addWidget(divider)
+
+        # Right: translated language
+        right_w = QWidget()
+        right_l = QVBoxLayout(right_w)
+        right_l.setContentsMargins(0, 0, 0, 0)
+        right_l.setSpacing(0)
+
+        self._right_header = QLabel("TRADUCAO")
+        self._right_header.setFixedHeight(24)
+        self._right_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._right_header.setStyleSheet("background: #1a1a20; color: #2d8cf0; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        right_l.addWidget(self._right_header)
+
+        self._subtitle_right = QTextEdit()
+        self._subtitle_right.setReadOnly(True)
+        self._subtitle_right.setObjectName("subtitleArea")
+        self._subtitle_right.setFont(QFont("SF Pro", 13))
+        right_l.addWidget(self._subtitle_right)
+
+        split_layout.addWidget(right_w)
+
+        # Keep reference for old code compatibility
+        self._subtitle_area = self._subtitle_left
+
+        split_w.setMinimumHeight(150)
+        layout.addWidget(split_w)
 
         # ==================== STATUS BAR ====================
         sb_w = QWidget()
@@ -1664,22 +1721,48 @@ class TranslatorWindow(QMainWindow):
     def _add_subtitle(self, original, translated, source="AUDIO"):
         src = self._lang_in.currentText()[:2].upper()
         tgt = self._lang_out.currentText()[:2].upper()
-        source_tag = f'<span style="color: #e07c3a;">[{source}]</span> ' if source == "MIC" else ""
 
-        self._subtitle_area.append(
-            f'{source_tag}<span style="color: #888; font-size: 12px;">[{src}] {original}</span>'
+        # Speaker color
+        speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
+        if source.startswith("Pessoa"):
+            try:
+                idx = int(source.split()[-1]) - 1
+                color = speaker_colors[idx % len(speaker_colors)]
+            except (ValueError, IndexError):
+                color = "#ccc"
+            speaker_html = f'<span style="color: {color}; font-weight: bold;">[{source}]</span> '
+        elif source == "MIC":
+            speaker_html = '<span style="color: #e07c3a; font-weight: bold;">[MIC]</span> '
+            color = "#e07c3a"
+        else:
+            speaker_html = ""
+            color = "#ccc"
+
+        # Left: original
+        self._subtitle_left.append(
+            f'{speaker_html}<span style="color: #ddd; font-size: 13px;">{original}</span>'
         )
-        self._subtitle_area.append(
-            f'{source_tag}<span style="color: #fff; font-size: 15px; font-weight: bold;">[{tgt}] {translated}</span>'
+        self._subtitle_left.append("")
+
+        # Right: translated
+        self._subtitle_right.append(
+            f'{speaker_html}<span style="color: #fff; font-size: 13px; font-weight: bold;">{translated}</span>'
         )
-        self._subtitle_area.append("")
-        bar = self._subtitle_area.verticalScrollBar()
-        bar.setValue(bar.maximum())
+        self._subtitle_right.append("")
+
+        # Auto-scroll both
+        for area in (self._subtitle_left, self._subtitle_right):
+            bar = area.verticalScrollBar()
+            bar.setValue(bar.maximum())
+
+        # Clear interim indicator
+        self._interim_label.setText("")
 
         # Update floating subtitle
+        tag = f"[{source}]" if source != "AUDIO" else ""
         self._floating_sub.update_text(
-            f"[{source}] [{src}] {original}",
-            f"[{tgt}] {translated}",
+            f"{tag} {original}",
+            f"{translated}",
         )
 
         # Log to file
@@ -1944,7 +2027,7 @@ class TranslatorWindow(QMainWindow):
             return
 
         # Ask to clear subtitle area if it has content
-        if self._subtitle_area.toPlainText().strip():
+        if self._subtitle_left.toPlainText().strip():
             reply = QMessageBox.question(
                 self, "Limpar transcricao",
                 "Deseja limpar a transcricao anterior?",
@@ -1952,7 +2035,8 @@ class TranslatorWindow(QMainWindow):
                 QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                self._subtitle_area.clear()
+                self._subtitle_left.clear()
+                self._subtitle_right.clear()
 
         self._running = True
         self._save_transcription = self._chk_save_transcription.isChecked()
@@ -1973,6 +2057,11 @@ class TranslatorWindow(QMainWindow):
         self._set_controls_enabled(False)
 
         self._start_pipeline()
+
+        # Update column headers with selected languages
+        self._left_header.setText(self._lang_in.currentText().upper())
+        self._right_header.setText(self._lang_out.currentText().upper())
+
         if self._btn_floating.isChecked():
             self._floating_sub.show()
         self._update_tray_icon()
@@ -2278,10 +2367,12 @@ class TranslatorWindow(QMainWindow):
         if not text.strip():
             return
 
-        # Interim subtitles (show partial text immediately)
+        # Interim — show in the header label only (no clutter in text area)
         if not is_final:
             if self._interim_subtitles and self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(text, "...", "AUDIO")
+                # Truncate long interim text
+                display = text[:80] + "..." if len(text) > 80 else text
+                self._interim_label.setText(f"  {display}")
             return
 
         # Final — feed to accumulator for smart grouping
