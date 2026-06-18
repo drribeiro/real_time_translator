@@ -1107,7 +1107,8 @@ class TranslatorWindow(QMainWindow):
         self._translator_out = None
         self._tts_in = None
         self._tts_out = None
-        self._tts_lock = threading.Lock()
+        self._tts_lock_in = threading.Lock()   # lock for incoming TTS (headphones)
+        self._tts_lock_out = threading.Lock()  # lock for outgoing TTS (virtual mic)
         self._passthrough_stream = None
 
         # Floating subtitle overlay
@@ -2302,20 +2303,22 @@ class TranslatorWindow(QMainWindow):
             self.signals.error.emit(str(e))
 
     def _speak_in(self, text):
-        with self._tts_lock:
+        """TTS for incoming — plays to headphones. Separate lock from outgoing."""
+        with self._tts_lock_in:
             try:
                 gain = self._tts_vol / 80.0
                 dev = self._get_output_device_index()
                 self._tts_in.speak_to_device(text, device_index=dev, gain=gain)
             except Exception as e:
-                self.signals.error.emit(f"TTS: {e}")
+                self.signals.error.emit(f"TTS In: {e}")
 
     def _speak_out(self, text, device):
-        with self._tts_lock:
+        """TTS for outgoing — plays to BlackHole 16ch. Separate lock from incoming."""
+        with self._tts_lock_out:
             try:
                 self._tts_out.speak_to_device(text, device)
             except Exception as e:
-                self.signals.error.emit(f"TTS: {e}")
+                self.signals.error.emit(f"TTS Out: {e}")
 
     # ==================== SYSTEM TRAY ====================
 
