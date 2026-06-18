@@ -25,7 +25,7 @@ from config import (
 )
 from audio_capture import AudioCapture
 from audio_router import AudioRouter, get_current_output
-from transcriber import RealtimeTranscriber
+from transcriber import RealtimeTranscriber, SmartAccumulator, TranscriptSegment
 from translator import TextTranslator
 from tts import TextToSpeech, OPENAI_VOICES
 from app_logger import get_logger, setup_logger
@@ -1110,6 +1110,8 @@ class TranslatorWindow(QMainWindow):
         self._tts_lock_in = threading.Lock()   # lock for incoming TTS (headphones)
         self._tts_lock_out = threading.Lock()  # lock for outgoing TTS (virtual mic)
         self._passthrough_stream = None
+        self._accumulator_in = None
+        self._accumulator_out = None
 
         # Floating subtitle overlay
         self._floating_sub = FloatingSubtitle()
@@ -2116,10 +2118,18 @@ class TranslatorWindow(QMainWindow):
                             openai_voice=self._openai_voice,
                         )
 
+                    # Smart accumulator groups segments for better translation
+                    self._accumulator_in = SmartAccumulator(
+                        on_ready=self._on_accumulated_incoming,
+                        max_segments=3,
+                        pause_timeout=1.5,
+                    )
+
                     self._incoming_transcriber = RealtimeTranscriber(
                         language=lang_in["stt"],
                         on_transcript=self._on_incoming,
                         endpointing_ms=self._endpointing_ms,
+                        diarize=True,
                     )
                     self._incoming_transcriber.start()
                     time.sleep(0.5)
@@ -2238,6 +2248,11 @@ class TranslatorWindow(QMainWindow):
         self._audio_meter.set_level(0)
         self._mic_meter.set_level(0)
 
+        # Flush accumulators
+        if self._accumulator_in:
+            self._accumulator_in.flush_remaining()
+            self._accumulator_in = None
+
         if self._incoming_capture:
             self._incoming_capture.stop()
             self._incoming_capture = None
@@ -2259,27 +2274,28 @@ class TranslatorWindow(QMainWindow):
 
     # ==================== TRANSCRIPTION CALLBACKS ====================
 
-    def _on_incoming(self, text, is_final):
+    def _on_incoming(self, text, is_final, speaker=-1):
         if not text.strip():
             return
 
-        # Interim subtitles (show partial text immediately, no translation)
+        # Interim subtitles (show partial text immediately)
         if not is_final:
             if self._interim_subtitles and self._btn_subtitle.isChecked():
                 self.signals.new_subtitle.emit(text, "...", "AUDIO")
-            if self._translate_interim and self._btn_subtitle.isChecked():
-                try:
-                    translated = self._translator_in.translate(text)
-                    self.signals.new_subtitle.emit(text, translated, "AUDIO")
-                except Exception:
-                    pass
             return
 
-        # Final result — always translate and process
+        # Final — feed to accumulator for smart grouping
+        if self._accumulator_in:
+            seg = TranscriptSegment(text, is_final, speaker)
+            self._accumulator_in.add(seg)
+
+    def _on_accumulated_incoming(self, text, speaker):
+        """Called by SmartAccumulator when grouped text is ready."""
+        speaker_tag = f"Pessoa {speaker + 1}" if speaker >= 0 else "AUDIO"
         try:
             translated = self._translator_in.translate(text)
             if self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(text, translated, "AUDIO")
+                self.signals.new_subtitle.emit(text, translated, speaker_tag)
             if self._btn_audio_in.isChecked() and translated:
                 threading.Thread(
                     target=self._speak_in, args=(translated,), daemon=True
@@ -2287,7 +2303,7 @@ class TranslatorWindow(QMainWindow):
         except Exception as e:
             self.signals.error.emit(str(e))
 
-    def _on_outgoing(self, text, is_final):
+    def _on_outgoing(self, text, is_final, speaker=-1):
         if not is_final or not text.strip():
             return
         try:
