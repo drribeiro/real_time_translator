@@ -1580,6 +1580,12 @@ class TranslatorWindow(QMainWindow):
 
         menu.addSeparator()
 
+        # Config
+        config_action = menu.addAction("Configuracoes")
+        config_action.triggered.connect(self._open_settings)
+
+        menu.addSeparator()
+
         # Quit
         quit_action = menu.addAction("Sair")
         quit_action.triggered.connect(self._quit_app)
@@ -1587,8 +1593,8 @@ class TranslatorWindow(QMainWindow):
         self._tray.setContextMenu(menu)
 
     def _on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self._show_window()
+        # Only show context menu, never auto-open the window
+        pass
 
     def _show_window(self):
         self.show()
