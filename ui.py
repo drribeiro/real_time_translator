@@ -929,12 +929,10 @@ class TranslatorWindow(QMainWindow):
 
         mode_row.addSpacing(20)
 
-        self._chk_save_transcription = QCheckBox("Salvar Transcricao")
-        self._chk_save_transcription.setStyleSheet("color: #999; font-size: 12px;")
+        self._chk_save_transcription = self._toggle_btn("Salvar Transcricao", "#16a085")
         mode_row.addWidget(self._chk_save_transcription)
 
-        self._chk_save_translation = QCheckBox("Salvar Traducao")
-        self._chk_save_translation.setStyleSheet("color: #999; font-size: 12px;")
+        self._chk_save_translation = self._toggle_btn("Salvar Traducao", "#16a085")
         mode_row.addWidget(self._chk_save_translation)
 
         mode_row.addStretch()
