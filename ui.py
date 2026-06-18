@@ -718,24 +718,36 @@ class TranslatorWindow(QMainWindow):
         self._preset_combo.currentIndexChanged.connect(self._on_preset_selected)
         ps_row.addWidget(self._preset_combo)
 
+        # "Criar preset" — visible when no preset selected
+        self._btn_create_preset = QPushButton("Criar preset")
+        self._btn_create_preset.setFixedHeight(30)
+        self._btn_create_preset.setStyleSheet(self._small_btn_style("#27ae60"))
+        self._btn_create_preset.clicked.connect(self._save_preset_as)
+        ps_row.addWidget(self._btn_create_preset)
+
+        # "Salvar" — visible when a preset is selected
         self._btn_save_preset = QPushButton("Salvar")
         self._btn_save_preset.setFixedHeight(30)
         self._btn_save_preset.setToolTip("Sobrescrever o preset selecionado")
         self._btn_save_preset.setStyleSheet(self._small_btn_style("#2d8cf0"))
         self._btn_save_preset.clicked.connect(self._save_preset)
+        self._btn_save_preset.hide()
         ps_row.addWidget(self._btn_save_preset)
 
+        # "Salvar como..." — visible when a preset is selected
         self._btn_saveas_preset = QPushButton("Salvar como...")
         self._btn_saveas_preset.setFixedHeight(30)
-        self._btn_saveas_preset.setToolTip("Salvar como novo preset")
         self._btn_saveas_preset.setStyleSheet(self._small_btn_style("#8e44ad"))
         self._btn_saveas_preset.clicked.connect(self._save_preset_as)
+        self._btn_saveas_preset.hide()
         ps_row.addWidget(self._btn_saveas_preset)
 
+        # "Excluir" — visible when a preset is selected
         self._btn_del_preset = QPushButton("Excluir")
         self._btn_del_preset.setFixedHeight(30)
         self._btn_del_preset.setStyleSheet(self._small_btn_style("#c0392b"))
         self._btn_del_preset.clicked.connect(self._delete_preset)
+        self._btn_del_preset.hide()
         ps_row.addWidget(self._btn_del_preset)
 
         ps_row.addStretch()
@@ -1208,13 +1220,22 @@ class TranslatorWindow(QMainWindow):
             self.signals.status_changed.emit("Configuracoes salvas")
 
     def _on_preset_selected(self, index):
-        if index <= 0:
+        has_preset = index > 0
+        self._update_preset_buttons(has_preset)
+        if not has_preset:
             self._preset_summary.setText("")
             return
         name = self._preset_combo.currentText()
         if name in self._presets:
             self._apply_config(self._presets[name])
             self._update_preset_summary(name)
+
+    def _update_preset_buttons(self, has_preset):
+        """Show/hide preset buttons based on selection."""
+        self._btn_create_preset.setVisible(not has_preset)
+        self._btn_save_preset.setVisible(has_preset)
+        self._btn_saveas_preset.setVisible(has_preset)
+        self._btn_del_preset.setVisible(has_preset)
 
     def _refresh_preset_combo(self):
         """Rebuild the preset dropdown from current presets dict."""
