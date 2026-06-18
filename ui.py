@@ -1112,6 +1112,8 @@ class TranslatorWindow(QMainWindow):
         self._passthrough_stream = None
         self._accumulator_in = None
         self._accumulator_out = None
+        self._speaker_names = {}  # {0: "João", 1: "Maria", ...}
+        self._speakers_seen = set()  # speaker indices detected so far
 
         # Floating subtitle overlay
         self._floating_sub = FloatingSubtitle()
@@ -1526,6 +1528,11 @@ class TranslatorWindow(QMainWindow):
             "QPushButton:hover { background: #444; color: #fff; }"
         )
 
+        self._btn_speakers = QPushButton("Pessoas (0)")
+        self._btn_speakers.setFixedHeight(24)
+        self._btn_speakers.setStyleSheet(header_btn_style)
+        self._btn_speakers.clicked.connect(self._open_speakers_dialog)
+        sub_header.addWidget(self._btn_speakers)
 
         self._btn_maximize = QPushButton("Maximizar")
         self._btn_maximize.setFixedHeight(24)
@@ -1682,15 +1689,20 @@ class TranslatorWindow(QMainWindow):
         tgt = self._lang_out.currentText()[:2].upper()
         ts = datetime.now().strftime("%H:%M:%S")
 
-        # Speaker color
+        # Speaker detection and naming
         speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
+        display_name = source
+
         if source.startswith("Pessoa"):
             try:
                 idx = int(source.split()[-1]) - 1
+                self._speakers_seen.add(idx)
+                self._update_speakers_button()
+                display_name = self._get_speaker_name(idx)
                 color = speaker_colors[idx % len(speaker_colors)]
             except (ValueError, IndexError):
                 color = "#ccc"
-            speaker_html = f'<span style="color: {color}; font-weight: bold;">[{source}]</span> '
+            speaker_html = f'<span style="color: {color}; font-weight: bold;">[{display_name}]</span> '
         elif source == "MIC":
             speaker_html = '<span style="color: #e07c3a; font-weight: bold;">[MIC]</span> '
         else:
@@ -1888,6 +1900,80 @@ class TranslatorWindow(QMainWindow):
             self.signals.status_changed.emit(f"Preset '{name}' excluido")
 
     # ==================== UI EVENTS ====================
+
+    def _get_speaker_name(self, speaker_idx: int) -> str:
+        """Get display name for a speaker index."""
+        if speaker_idx < 0:
+            return "AUDIO"
+        if speaker_idx in self._speaker_names:
+            return self._speaker_names[speaker_idx]
+        return f"Pessoa {speaker_idx + 1}"
+
+    def _open_speakers_dialog(self):
+        """Open dialog to name detected speakers."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nomear Pessoas")
+        dialog.setFixedWidth(400)
+        dialog.setStyleSheet("""
+            QDialog { background: #1e1e24; color: #ddd; }
+            QLabel { color: #aaa; font-size: 12px; }
+            QLineEdit { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 6px; font-size: 13px; }
+        """)
+
+        layout = QVBoxLayout(dialog)
+
+        info = QLabel("Nomeie as pessoas detectadas na conversa.\nOs nomes aparecem na transcricao e nos arquivos salvos.")
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(info)
+
+        speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
+        inputs = {}
+
+        if not self._speakers_seen:
+            no_speakers = QLabel("Nenhuma pessoa detectada ainda.\nInicie uma sessao para detectar falantes.")
+            no_speakers.setStyleSheet("color: #666; font-size: 12px;")
+            no_speakers.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(no_speakers)
+        else:
+            form = QFormLayout()
+            for idx in sorted(self._speakers_seen):
+                color = speaker_colors[idx % len(speaker_colors)]
+                label = QLabel(f"Pessoa {idx + 1}")
+                label.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold;")
+
+                name_input = QLineEdit()
+                name_input.setPlaceholderText(f"Nome da Pessoa {idx + 1}")
+                name_input.setText(self._speaker_names.get(idx, ""))
+                inputs[idx] = name_input
+
+                form.addRow(label, name_input)
+            layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec():
+            for idx, inp in inputs.items():
+                name = inp.text().strip()
+                if name:
+                    self._speaker_names[idx] = name
+                elif idx in self._speaker_names:
+                    del self._speaker_names[idx]
+            self._update_speakers_button()
+
+    def _update_speakers_button(self):
+        """Update the speakers button label with count."""
+        count = len(self._speakers_seen)
+        named = sum(1 for s in self._speakers_seen if s in self._speaker_names)
+        if named > 0:
+            self._btn_speakers.setText(f"Pessoas ({named}/{count})")
+        else:
+            self._btn_speakers.setText(f"Pessoas ({count})")
 
     def _toggle_maximize_subtitle(self):
         """Toggle between maximized subtitle view and full UI."""
@@ -2115,10 +2201,20 @@ class TranslatorWindow(QMainWindow):
         if not self._log_file:
             return
         ts = datetime.now().strftime("%H:%M:%S")
+
+        # Resolve speaker name for log
+        log_source = source
+        if source.startswith("Pessoa"):
+            try:
+                idx = int(source.split()[-1]) - 1
+                log_source = self._get_speaker_name(idx)
+            except (ValueError, IndexError):
+                pass
+
         if self._save_transcription:
-            self._log_file.write(f"[{ts}] [{source}] [{src_label}] {original}\n")
+            self._log_file.write(f"[{ts}] [{log_source}] [{src_label}] {original}\n")
         if self._save_translation:
-            self._log_file.write(f"[{ts}] [{source}] [{tgt_label}] {translated}\n")
+            self._log_file.write(f"[{ts}] [{log_source}] [{tgt_label}] {translated}\n")
         if self._save_transcription or self._save_translation:
             self._log_file.write("\n")
             self._log_file.flush()
