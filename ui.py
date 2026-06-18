@@ -1520,13 +1520,21 @@ class TranslatorWindow(QMainWindow):
 
         sub_header.addSpacing(12)
 
-        self._btn_maximize = QPushButton("Maximizar")
-        self._btn_maximize.setFixedHeight(24)
-        self._btn_maximize.setStyleSheet(
+        header_btn_style = (
             "QPushButton { background: #333; color: #aaa; border: 1px solid #444; "
             "border-radius: 4px; padding: 2px 12px; font-size: 11px; }"
             "QPushButton:hover { background: #444; color: #fff; }"
         )
+
+        self._btn_swap_cols = QPushButton("Trocar lados")
+        self._btn_swap_cols.setFixedHeight(24)
+        self._btn_swap_cols.setStyleSheet(header_btn_style)
+        self._btn_swap_cols.clicked.connect(self._swap_columns)
+        sub_header.addWidget(self._btn_swap_cols)
+
+        self._btn_maximize = QPushButton("Maximizar")
+        self._btn_maximize.setFixedHeight(24)
+        self._btn_maximize.setStyleSheet(header_btn_style)
         self._btn_maximize.clicked.connect(self._toggle_maximize_subtitle)
         sub_header.addWidget(self._btn_maximize)
 
@@ -1932,6 +1940,28 @@ class TranslatorWindow(QMainWindow):
             self.signals.status_changed.emit(f"Preset '{name}' excluido")
 
     # ==================== UI EVENTS ====================
+
+    def _swap_columns(self):
+        """Swap left and right transcript columns."""
+        split = self._subtitle_left.parent().parent().layout()
+        # Swap the widgets by removing and re-inserting
+        left_w = split.itemAt(0).widget()
+        divider = split.itemAt(1).widget()
+        right_w = split.itemAt(2).widget()
+
+        split.removeWidget(left_w)
+        split.removeWidget(divider)
+        split.removeWidget(right_w)
+
+        split.addWidget(right_w)
+        split.addWidget(divider)
+        split.addWidget(left_w)
+
+        # Swap headers
+        left_text = self._left_header.text()
+        right_text = self._right_header.text()
+        self._left_header.setText(right_text)
+        self._right_header.setText(left_text)
 
     def _toggle_maximize_subtitle(self):
         """Toggle between maximized subtitle view and full UI."""
