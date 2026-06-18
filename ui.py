@@ -1534,6 +1534,27 @@ class TranslatorWindow(QMainWindow):
         self._btn_speakers.clicked.connect(self._open_speakers_dialog)
         sub_header.addWidget(self._btn_speakers)
 
+        self._font_size = 15
+        btn_font_down = QPushButton("A-")
+        btn_font_down.setFixedSize(28, 24)
+        btn_font_down.setStyleSheet(header_btn_style)
+        btn_font_down.clicked.connect(lambda: self._change_font_size(-2))
+        sub_header.addWidget(btn_font_down)
+
+        self._font_size_label = QLabel("15")
+        self._font_size_label.setStyleSheet("color: #666; font-size: 10px;")
+        self._font_size_label.setFixedWidth(18)
+        self._font_size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_header.addWidget(self._font_size_label)
+
+        btn_font_up = QPushButton("A+")
+        btn_font_up.setFixedSize(28, 24)
+        btn_font_up.setStyleSheet(header_btn_style)
+        btn_font_up.clicked.connect(lambda: self._change_font_size(2))
+        sub_header.addWidget(btn_font_up)
+
+        sub_header.addSpacing(6)
+
         self._btn_maximize = QPushButton("Maximizar")
         self._btn_maximize.setFixedHeight(24)
         self._btn_maximize.setStyleSheet(header_btn_style)
@@ -1711,11 +1732,11 @@ class TranslatorWindow(QMainWindow):
         # Translated (bold, bright, larger)
         self._subtitle_area.append(
             f'{speaker_html}'
-            f'<span style="color: #fff; font-size: 15px; font-weight: bold;">{translated}</span>'
+            f'<span style="color: #fff; font-size: {self._font_size}px; font-weight: bold;">{translated}</span>'
         )
         # Original (smaller, dimmer, below)
         self._subtitle_area.append(
-            f'<span style="color: #666; font-size: 11px;">{ts}  [{src}] {original}</span>'
+            f'<span style="color: #666; font-size: {max(9, self._font_size - 4)}px;">{ts}  [{src}] {original}</span>'
         )
         self._subtitle_area.append("")
 
@@ -1974,6 +1995,11 @@ class TranslatorWindow(QMainWindow):
             self._btn_speakers.setText(f"Pessoas ({named}/{count})")
         else:
             self._btn_speakers.setText(f"Pessoas ({count})")
+
+    def _change_font_size(self, delta):
+        self._font_size = max(9, min(30, self._font_size + delta))
+        self._font_size_label.setText(str(self._font_size))
+        self._subtitle_area.setFont(QFont("SF Pro", self._font_size - 2))
 
     def _toggle_maximize_subtitle(self):
         """Toggle between maximized subtitle view and full UI."""
