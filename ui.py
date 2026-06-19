@@ -2095,9 +2095,7 @@ class TranslatorWindow(QMainWindow):
     def _on_subtitle_toggled(self, checked):
         """When Legenda is toggled, enable/disable Legenda Flutuante."""
         self._btn_floating.setEnabled(checked)
-        if checked:
-            self._btn_floating.setChecked(True)
-        else:
+        if not checked:
             self._btn_floating.setChecked(False)
             self._floating_sub.hide()
 
