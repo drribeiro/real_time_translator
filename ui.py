@@ -1448,9 +1448,11 @@ class TranslatorWindow(QMainWindow):
         func_row.addWidget(self._btn_floating)
 
         self._btn_audio_in = ToggleSwitch("Audio In", "#e07c3a")
+        self._btn_audio_in.toggled.connect(self._on_mode_toggled_live)
         func_row.addWidget(self._btn_audio_in)
 
         self._btn_mic_out = ToggleSwitch("Mic Out", "#8e44ad")
+        self._btn_mic_out.toggled.connect(self._on_mode_toggled_live)
         func_row.addWidget(self._btn_mic_out)
 
         self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085", checked=True)
@@ -2083,6 +2085,12 @@ class TranslatorWindow(QMainWindow):
             for s in sections:
                 s.hide()
             self._btn_maximize.setText("Restaurar")
+
+    def _on_mode_toggled_live(self, checked):
+        """When Audio In or Mic Out toggled during active session, restart pipeline."""
+        if self._running:
+            self._stop_pipeline()
+            self._start_pipeline()
 
     def _on_subtitle_toggled(self, checked):
         """When Legenda is toggled, enable/disable Legenda Flutuante."""
