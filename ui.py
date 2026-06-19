@@ -208,10 +208,11 @@ class ToggleSwitch(QWidget):
 
 class PipelineSignals(QObject):
     new_subtitle = pyqtSignal(str, str, str)  # (original, translated, source)
+    live_text = pyqtSignal(str, str)           # (interim_text, source) — live typing
     status_changed = pyqtSignal(str)
     error = pyqtSignal(str)
-    audio_level = pyqtSignal(float)   # incoming audio level 0-1
-    mic_level = pyqtSignal(float)     # mic audio level 0-1
+    audio_level = pyqtSignal(float)
+    mic_level = pyqtSignal(float)
 
 
 class SettingsDialog(QDialog):
@@ -1700,12 +1701,71 @@ class TranslatorWindow(QMainWindow):
 
     def _connect_signals(self):
         self.signals.new_subtitle.connect(self._add_subtitle)
+        self.signals.live_text.connect(self._update_live_text)
         self.signals.status_changed.connect(self._set_status)
         self.signals.error.connect(self._set_error)
         self.signals.audio_level.connect(self._audio_meter.set_level)
         self.signals.mic_level.connect(self._mic_meter.set_level)
 
+    def _update_live_text(self, text, source):
+        """Update the live typing line at the bottom of the transcript."""
+        speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
+        if source.startswith("Pessoa"):
+            try:
+                idx = int(source.split()[-1]) - 1
+                color = speaker_colors[idx % len(speaker_colors)]
+                display_name = self._get_speaker_name(idx)
+            except (ValueError, IndexError):
+                color = "#888"
+                display_name = source
+            prefix = f'<span style="color: {color}; font-weight: bold;">[{display_name}]</span> '
+        else:
+            prefix = ""
+
+        live_html = (
+            f'{prefix}'
+            f'<span style="color: #999; font-size: {self._font_size}px; font-style: italic;">{text}</span>'
+        )
+
+        # Replace the live block using cursor
+        cursor = self._subtitle_area.textCursor()
+        # Find and remove previous live block (marked with custom property)
+        doc = self._subtitle_area.document()
+        # Simple approach: remove last block if it's a live block
+        if hasattr(self, '_has_live_block') and self._has_live_block:
+            cursor.movePosition(cursor.MoveOperation.End)
+            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+            # Select the whole live line
+            cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.deletePreviousChar()  # remove trailing newline
+
+        # Append the live block
+        self._subtitle_area.append(live_html)
+        self._has_live_block = True
+
+        # Auto-scroll
+        bar = self._subtitle_area.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+        # Update interim label too
+        display = text[:80] + "..." if len(text) > 80 else text
+        self._interim_label.setText(f"  {display}")
+
     def _add_subtitle(self, original, translated, source="AUDIO"):
+        # Remove live block if present
+        if hasattr(self, '_has_live_block') and self._has_live_block:
+            cursor = self._subtitle_area.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+            cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
+            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            if cursor.position() > 0:
+                cursor.deletePreviousChar()
+            self._has_live_block = False
+
         src = self._lang_in.currentText()[:2].upper()
         tgt = self._lang_out.currentText()[:2].upper()
         ts = datetime.now().strftime("%H:%M:%S")
@@ -2444,12 +2504,11 @@ class TranslatorWindow(QMainWindow):
         if not text.strip():
             return
 
-        # Interim — show in the header label only (no clutter in text area)
+        # Interim — show live text updating in real-time
         if not is_final:
             if self._interim_subtitles and self._btn_subtitle.isChecked():
-                # Truncate long interim text
-                display = text[:80] + "..." if len(text) > 80 else text
-                self._interim_label.setText(f"  {display}")
+                speaker_tag = f"Pessoa {speaker + 1}" if speaker >= 0 else "AUDIO"
+                self.signals.live_text.emit(text, speaker_tag)
             return
 
         # Final — feed to accumulator for smart grouping
