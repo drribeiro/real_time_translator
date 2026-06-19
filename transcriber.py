@@ -115,14 +115,14 @@ class RealtimeTranscriber:
         self.model = model
         self.diarize = diarize
         self._connection = None
+        self._ctx = None
         self._listen_thread = None
         self._running = False
+        self._reconnect_attempts = 0
+        self._max_reconnect_attempts = 10
 
-    def start(self):
-        """Open WebSocket connection to Deepgram and start listening."""
-        client = DeepgramClient(api_key=self.api_key)
-
-        connect_params = dict(
+    def _build_connect_params(self):
+        params = dict(
             model=self.model,
             language=self.language,
             encoding="linear16",
@@ -134,28 +134,84 @@ class RealtimeTranscriber:
             endpointing=str(self.endpointing_ms),
         )
         if self.diarize:
-            connect_params["diarize"] = "true"
+            params["diarize"] = "true"
+        return params
 
-        self._ctx = client.listen.v1.connect(**connect_params)
-        self._connection = self._ctx.__enter__()
-
-        self._connection.on(EventType.MESSAGE, self._on_message)
-        self._connection.on(EventType.ERROR, self._on_error)
-        self._connection.on(EventType.OPEN, lambda _: None)
-        self._connection.on(EventType.CLOSE, lambda _: None)
-
+    def start(self):
+        """Open WebSocket connection to Deepgram and start listening."""
         self._running = True
-        self._listen_thread = threading.Thread(target=self._listen_loop, daemon=True)
-        self._listen_thread.start()
+        self._reconnect_attempts = 0
+        self._connect()
 
-        print(f"[Transcriber] Connected (lang={self.language}, model={self.model}, diarize={self.diarize})")
+    def _connect(self):
+        """Establish WebSocket connection."""
+        try:
+            client = DeepgramClient(api_key=self.api_key)
+            self._ctx = client.listen.v1.connect(**self._build_connect_params())
+            self._connection = self._ctx.__enter__()
+
+            self._connection.on(EventType.MESSAGE, self._on_message)
+            self._connection.on(EventType.ERROR, self._on_error)
+            self._connection.on(EventType.OPEN, lambda _: None)
+            self._connection.on(EventType.CLOSE, lambda _: self._on_close())
+
+            self._listen_thread = threading.Thread(target=self._listen_loop, daemon=True)
+            self._listen_thread.start()
+
+            self._reconnect_attempts = 0
+            print(f"[Transcriber] Connected (lang={self.language}, model={self.model})")
+        except Exception as e:
+            print(f"[Transcriber] Connection failed: {e}")
+            self._schedule_reconnect()
 
     def _listen_loop(self):
         try:
             self._connection.start_listening()
         except Exception as e:
             if self._running:
-                print(f"[Transcriber] Listen error: {e}")
+                print(f"[Transcriber] Listen ended: {e}")
+        # Connection closed — try to reconnect
+        if self._running:
+            self._schedule_reconnect()
+
+    def _on_close(self):
+        """WebSocket closed — schedule reconnect."""
+        if self._running:
+            self._schedule_reconnect()
+
+    def _schedule_reconnect(self):
+        """Reconnect with exponential backoff."""
+        if not self._running:
+            return
+        if self._reconnect_attempts >= self._max_reconnect_attempts:
+            print(f"[Transcriber] Max reconnect attempts reached ({self._max_reconnect_attempts})")
+            return
+
+        self._reconnect_attempts += 1
+        delay = min(2 ** self._reconnect_attempts, 30)  # max 30s
+        print(f"[Transcriber] Reconnecting in {delay}s (attempt {self._reconnect_attempts})...")
+
+        # Clean up old connection
+        self._cleanup_connection()
+
+        timer = threading.Timer(delay, self._connect)
+        timer.daemon = True
+        timer.start()
+
+    def _cleanup_connection(self):
+        """Clean up current connection without stopping."""
+        if self._connection:
+            try:
+                self._connection.send_close_stream()
+            except Exception:
+                pass
+        if self._ctx:
+            try:
+                self._ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+        self._connection = None
+        self._ctx = None
 
     def _on_message(self, message):
         """Handle incoming messages from Deepgram."""
@@ -248,21 +304,14 @@ class RealtimeTranscriber:
             pass
 
     def stop(self):
-        """Close the connection."""
+        """Close the connection permanently."""
         self._running = False
         if self._connection:
             try:
                 self._connection.send_finalize()
-                self._connection.send_close_stream()
             except Exception:
                 pass
-        if self._ctx:
-            try:
-                self._ctx.__exit__(None, None, None)
-            except Exception:
-                pass
-            self._ctx = None
-        self._connection = None
+        self._cleanup_connection()
 
 
 if __name__ == "__main__":
