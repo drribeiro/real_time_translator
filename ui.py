@@ -1115,6 +1115,8 @@ class TranslatorWindow(QMainWindow):
         self._accumulator_out = None
         self._speaker_names = {}  # {0: "João", 1: "Maria", ...}
         self._speakers_seen = set()  # speaker indices detected so far
+        self._has_live_block = False
+        self._live_cursor_pos = -1
 
         # Floating subtitle overlay
         self._floating_sub = FloatingSubtitle()
@@ -1708,7 +1710,7 @@ class TranslatorWindow(QMainWindow):
         self.signals.mic_level.connect(self._mic_meter.set_level)
 
     def _update_live_text(self, text, source):
-        """Update the live typing line at the bottom of the transcript."""
+        """Update the live typing line at the bottom — replaces only the live part."""
         speaker_colors = ["#4ecdc4", "#ff6b6b", "#ffe66d", "#a8e6cf", "#dda0dd"]
         if source.startswith("Pessoa"):
             try:
@@ -1727,22 +1729,22 @@ class TranslatorWindow(QMainWindow):
             f'<span style="color: #999; font-size: {self._font_size}px; font-style: italic;">{text}</span>'
         )
 
-        # Replace the live block using cursor
         cursor = self._subtitle_area.textCursor()
-        # Find and remove previous live block (marked with custom property)
-        doc = self._subtitle_area.document()
-        # Simple approach: remove last block if it's a live block
-        if hasattr(self, '_has_live_block') and self._has_live_block:
-            cursor.movePosition(cursor.MoveOperation.End)
-            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-            # Select the whole live line
-            cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
-            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-            cursor.removeSelectedText()
-            cursor.deletePreviousChar()  # remove trailing newline
 
-        # Append the live block
-        self._subtitle_area.append(live_html)
+        # Remove previous live text (from saved position to end)
+        if self._has_live_block and self._live_cursor_pos >= 0:
+            cursor.setPosition(self._live_cursor_pos)
+            cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+        else:
+            # First live block — save where finalized content ends
+            cursor.movePosition(cursor.MoveOperation.End)
+            self._live_cursor_pos = cursor.position()
+
+        # Insert live text at the end
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertBlock()
+        cursor.insertHtml(live_html)
         self._has_live_block = True
 
         # Auto-scroll
@@ -1755,15 +1757,11 @@ class TranslatorWindow(QMainWindow):
 
     def _add_subtitle(self, original, translated, source="AUDIO"):
         # Remove live block if present
-        if hasattr(self, '_has_live_block') and self._has_live_block:
+        if self._has_live_block and self._live_cursor_pos >= 0:
             cursor = self._subtitle_area.textCursor()
-            cursor.movePosition(cursor.MoveOperation.End)
-            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-            cursor.movePosition(cursor.MoveOperation.PreviousBlock, cursor.MoveMode.KeepAnchor)
-            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
+            cursor.setPosition(self._live_cursor_pos)
+            cursor.movePosition(cursor.MoveOperation.End, cursor.MoveMode.KeepAnchor)
             cursor.removeSelectedText()
-            if cursor.position() > 0:
-                cursor.deletePreviousChar()
             self._has_live_block = False
 
         src = self._lang_in.currentText()[:2].upper()
@@ -1803,6 +1801,11 @@ class TranslatorWindow(QMainWindow):
         # Auto-scroll
         bar = self._subtitle_area.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+        # Update live cursor position to end of finalized content
+        cursor = self._subtitle_area.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self._live_cursor_pos = cursor.position()
 
         # Clear interim indicator
         self._interim_label.setText("")
