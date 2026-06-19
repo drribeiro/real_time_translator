@@ -1117,6 +1117,7 @@ class TranslatorWindow(QMainWindow):
         self._speakers_seen = set()  # speaker indices detected so far
         self._has_live_block = False
         self._live_cursor_pos = -1
+        self._transcript_history = []  # [(timestamp, source, original, translated)]
 
         # Floating subtitle overlay
         self._floating_sub = FloatingSubtitle()
@@ -1563,6 +1564,16 @@ class TranslatorWindow(QMainWindow):
 
         sub_header.addSpacing(6)
 
+        self._btn_summarize = QPushButton("Resumir")
+        self._btn_summarize.setFixedHeight(24)
+        self._btn_summarize.setStyleSheet(
+            "QPushButton { background: #8e44ad; color: white; border: none; "
+            "border-radius: 4px; padding: 2px 12px; font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover { background: #9b59b6; }"
+        )
+        self._btn_summarize.clicked.connect(self._open_summarize_dialog)
+        sub_header.addWidget(self._btn_summarize)
+
         self._btn_maximize = QPushButton("Maximizar")
         self._btn_maximize.setFixedHeight(24)
         self._btn_maximize.setStyleSheet(header_btn_style)
@@ -1828,6 +1839,9 @@ class TranslatorWindow(QMainWindow):
             f"{translated}",
         )
 
+        # Save to history for summarization
+        self._transcript_history.append((datetime.now(), display_name, original, translated))
+
         # Log to file
         self._log_entry(src, original, tgt, translated, source=source)
 
@@ -2072,6 +2086,158 @@ class TranslatorWindow(QMainWindow):
             self._btn_speakers.setText(f"Pessoas ({named}/{count})")
         else:
             self._btn_speakers.setText(f"Pessoas ({count})")
+
+    def _open_summarize_dialog(self):
+        """Open dialog to request a summary of recent transcript."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Resumir Conversa")
+        dialog.setFixedWidth(500)
+        dialog.setStyleSheet("""
+            QDialog { background: #1e1e24; color: #ddd; }
+            QLabel { color: #aaa; font-size: 12px; }
+            QComboBox { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 6px; font-size: 13px; }
+            QTextEdit { background: #2a2a2e; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 8px; font-size: 13px; }
+            QPushButton { background: #8e44ad; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: bold; }
+            QPushButton:hover { background: #9b59b6; }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+
+        info = QLabel("Gere um resumo da conversa usando IA.")
+        info.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(info)
+
+        # Time range
+        time_row = QHBoxLayout()
+        time_row.addWidget(QLabel("Periodo:"))
+        time_combo = QComboBox()
+        time_combo.addItems(["Ultimos 5 minutos", "Ultimos 10 minutos", "Ultimos 15 minutos",
+                             "Ultimos 30 minutos", "Toda a sessao"])
+        time_row.addWidget(time_combo)
+        time_row.addStretch()
+        layout.addLayout(time_row)
+
+        # Language
+        lang_row = QHBoxLayout()
+        lang_row.addWidget(QLabel("Idioma do resumo:"))
+        lang_combo = QComboBox()
+        lang_combo.addItems(["Portugues", "English", "Mesmo da traducao"])
+        lang_row.addWidget(lang_combo)
+        lang_row.addStretch()
+        layout.addLayout(lang_row)
+
+        # Format
+        fmt_row = QHBoxLayout()
+        fmt_row.addWidget(QLabel("Formato:"))
+        fmt_combo = QComboBox()
+        fmt_combo.addItems(["Resumo geral", "Pontos-chave (bullets)", "Ata de reuniao", "Decisoes e acoes"])
+        fmt_row.addWidget(fmt_combo)
+        fmt_row.addStretch()
+        layout.addLayout(fmt_row)
+
+        # Result area
+        result_area = QTextEdit()
+        result_area.setReadOnly(True)
+        result_area.setMinimumHeight(200)
+        result_area.setPlaceholderText("O resumo aparecera aqui...")
+        layout.addWidget(result_area)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_generate = QPushButton("Gerar Resumo")
+        btn_row.addWidget(btn_generate)
+
+        btn_copy = QPushButton("Copiar")
+        btn_copy.setStyleSheet("QPushButton { background: #2d8cf0; } QPushButton:hover { background: #3a9df5; }")
+        btn_copy.setEnabled(False)
+        btn_row.addWidget(btn_copy)
+
+        btn_row.addStretch()
+
+        btn_close = QPushButton("Fechar")
+        btn_close.setStyleSheet("QPushButton { background: #555; } QPushButton:hover { background: #666; }")
+        btn_close.clicked.connect(dialog.close)
+        btn_row.addWidget(btn_close)
+        layout.addLayout(btn_row)
+
+        def generate():
+            time_minutes = [5, 10, 15, 30, 999999][time_combo.currentIndex()]
+            lang_options = ["pt-BR", "en", "auto"]
+            summary_lang = lang_options[lang_combo.currentIndex()]
+            fmt_options = ["summary", "bullets", "meeting_notes", "decisions"]
+            summary_fmt = fmt_options[fmt_combo.currentIndex()]
+
+            # Filter history by time
+            cutoff = datetime.now() - __import__('datetime').timedelta(minutes=time_minutes)
+            entries = [(t, s, o, tr) for t, s, o, tr in self._transcript_history if t >= cutoff]
+
+            if not entries:
+                result_area.setText("Nenhuma transcricao encontrada nesse periodo.")
+                return
+
+            # Build transcript text
+            transcript_text = ""
+            for t, speaker, original, translated in entries:
+                ts = t.strftime("%H:%M:%S")
+                if translated and translated != original:
+                    transcript_text += f"[{ts}] [{speaker}] {original}\n  -> {translated}\n"
+                else:
+                    transcript_text += f"[{ts}] [{speaker}] {original}\n"
+
+            btn_generate.setText("Gerando...")
+            btn_generate.setEnabled(False)
+            result_area.setText("Aguarde...")
+
+            def call_ai():
+                try:
+                    api_key = os.getenv("OPENAI_API_KEY", "")
+                    if not api_key:
+                        result_area.setText("Chave da OpenAI nao configurada.\nVa em Config > API Keys.")
+                        return
+
+                    import openai
+                    client = openai.OpenAI(api_key=api_key, timeout=30.0)
+
+                    fmt_prompts = {
+                        "summary": "Faca um resumo conciso da conversa.",
+                        "bullets": "Liste os pontos-chave da conversa em bullets.",
+                        "meeting_notes": "Gere uma ata de reuniao com: participantes, topicos discutidos, e conclusoes.",
+                        "decisions": "Liste as decisoes tomadas e acoes definidas na conversa.",
+                    }
+
+                    lang_instruction = ""
+                    if summary_lang == "pt-BR":
+                        lang_instruction = "Responda em portugues brasileiro."
+                    elif summary_lang == "en":
+                        lang_instruction = "Respond in English."
+                    else:
+                        lang_instruction = f"Responda no idioma: {self._lang_out.currentText()}."
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": f"Voce e um assistente que resume conversas e reunioes. {lang_instruction}"},
+                            {"role": "user", "content": f"{fmt_prompts[summary_fmt]}\n\nTranscricao:\n{transcript_text}"}
+                        ],
+                        max_tokens=1500,
+                    )
+
+                    summary = response.choices[0].message.content
+                    result_area.setText(summary)
+                    btn_copy.setEnabled(True)
+                except Exception as e:
+                    result_area.setText(f"Erro ao gerar resumo:\n{e}")
+                finally:
+                    btn_generate.setText("Gerar Resumo")
+                    btn_generate.setEnabled(True)
+
+            threading.Thread(target=call_ai, daemon=True).start()
+
+        btn_generate.clicked.connect(generate)
+        btn_copy.clicked.connect(lambda: QApplication.clipboard().setText(result_area.toPlainText()))
+
+        dialog.exec()
 
     def _change_font_size(self, delta):
         self._font_size = max(9, min(30, self._font_size + delta))
