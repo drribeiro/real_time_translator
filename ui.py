@@ -256,6 +256,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_storage_tab(), "Armazenamento")
         self._tabs.addTab(self._build_presets_tab(), "Presets")
         self._tabs.addTab(self._build_performance_tab(), "Performance")
+        self._tabs.addTab(self._build_ai_tab(), "IA")
         layout.addWidget(self._tabs)
 
         # Save / Cancel
@@ -680,6 +681,135 @@ class SettingsDialog(QDialog):
             f"Traducao: ~{translate_ms}ms + TTS: ~{tts_ms}ms)"
         )
 
+    # ==================== TAB: IA ====================
+
+    def _build_ai_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Provider selection
+        provider_group = QGroupBox("Provider de IA (Resumos)")
+        pg = QFormLayout()
+
+        self._ai_provider = QComboBox()
+        self._ai_provider.addItems(["OpenAI", "DeepSeek", "Anthropic (Claude)", "Groq", "Personalizado"])
+        self._ai_provider.currentIndexChanged.connect(self._on_ai_provider_changed)
+        pg.addRow("Provider:", self._ai_provider)
+
+        prov_info = QLabel("Escolha qual API usar para gerar resumos da conversa")
+        prov_info.setStyleSheet("color: #666; font-size: 10px;")
+        prov_info.setWordWrap(True)
+        pg.addRow("", prov_info)
+
+        provider_group.setLayout(pg)
+        layout.addWidget(provider_group)
+
+        # API config
+        api_group = QGroupBox("Configuracao da API")
+        ag = QFormLayout()
+
+        self._ai_api_url = QLineEdit()
+        self._ai_api_url.setPlaceholderText("URL base da API (preenchido automaticamente)")
+        ag.addRow("URL da API:", self._ai_api_url)
+
+        self._ai_api_key = QLineEdit()
+        self._ai_api_key.setPlaceholderText("Cole a chave da API aqui")
+        self._ai_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+
+        key_row = QHBoxLayout()
+        key_row.addWidget(self._ai_api_key)
+        show_btn = QPushButton("Mostrar")
+        show_btn.setFixedWidth(65)
+        show_btn.clicked.connect(lambda: self._toggle_vis(self._ai_api_key, show_btn))
+        key_row.addWidget(show_btn)
+        key_w = QWidget()
+        key_w.setLayout(key_row)
+        ag.addRow("API Key:", key_w)
+
+        self._ai_model = QComboBox()
+        self._ai_model.setEditable(True)
+        ag.addRow("Modelo:", self._ai_model)
+
+        api_group.setLayout(ag)
+        layout.addWidget(api_group)
+
+        # Links
+        links_group = QGroupBox("Criar contas")
+        lg = QVBoxLayout()
+        links = [
+            ("OpenAI — platform.openai.com", "https://platform.openai.com/signup"),
+            ("DeepSeek — platform.deepseek.com", "https://platform.deepseek.com/sign_up"),
+            ("Anthropic — console.anthropic.com", "https://console.anthropic.com/"),
+            ("Groq — console.groq.com", "https://console.groq.com/"),
+        ]
+        for label, url in links:
+            btn = QPushButton(label)
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; color: #2d8cf0; border: none; "
+                "text-align: left; font-size: 12px; padding: 2px; }"
+                "QPushButton:hover { color: #3a9df5; text-decoration: underline; }"
+            )
+            btn.clicked.connect(lambda _, u=url: subprocess.Popen(["open", u]))
+            lg.addWidget(btn)
+        links_group.setLayout(lg)
+        layout.addWidget(links_group)
+
+        layout.addStretch()
+
+        # Load saved values
+        saved_provider = os.getenv("AI_PROVIDER", "openai")
+        providers = {"openai": 0, "deepseek": 1, "anthropic": 2, "groq": 3, "custom": 4}
+        self._ai_provider.setCurrentIndex(providers.get(saved_provider, 0))
+        self._ai_api_url.setText(os.getenv("AI_API_URL", ""))
+        self._ai_api_key.setText(os.getenv("AI_API_KEY", ""))
+        self._ai_model.setCurrentText(os.getenv("AI_MODEL", ""))
+        self._on_ai_provider_changed(self._ai_provider.currentIndex())
+
+        return tab
+
+    def _on_ai_provider_changed(self, index):
+        """Update API URL and models based on selected provider."""
+        configs = {
+            0: {  # OpenAI
+                "url": "https://api.openai.com/v1",
+                "models": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1-nano"],
+                "key_env": "OPENAI_API_KEY",
+            },
+            1: {  # DeepSeek
+                "url": "https://api.deepseek.com/v1",
+                "models": ["deepseek-chat", "deepseek-reasoner"],
+                "key_env": "",
+            },
+            2: {  # Anthropic
+                "url": "https://api.anthropic.com/v1",
+                "models": ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+                "key_env": "",
+            },
+            3: {  # Groq
+                "url": "https://api.groq.com/openai/v1",
+                "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+                "key_env": "",
+            },
+            4: {  # Custom
+                "url": "",
+                "models": [],
+                "key_env": "",
+            },
+        }
+        cfg = configs.get(index, configs[0])
+        self._ai_api_url.setText(cfg["url"])
+        self._ai_model.clear()
+        self._ai_model.addItems(cfg["models"])
+
+        # Auto-fill key from OpenAI if available
+        if cfg["key_env"]:
+            key = os.getenv(cfg["key_env"], "")
+            if key and not self._ai_api_key.text():
+                self._ai_api_key.setText(key)
+
+        # Enable/disable URL editing
+        self._ai_api_url.setReadOnly(index != 4)
+
     def _build_presets_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -855,6 +985,13 @@ class SettingsDialog(QDialog):
         set_key(ENV_FILE, "TRANSLATE_INTERIM", "true" if self._translate_interim.isChecked() else "false")
         stt_models = ["nova-2", "nova-3"]
         set_key(ENV_FILE, "STT_MODEL", stt_models[self._stt_model_combo.currentIndex()])
+
+        # Save AI settings
+        ai_providers = ["openai", "deepseek", "anthropic", "groq", "custom"]
+        set_key(ENV_FILE, "AI_PROVIDER", ai_providers[self._ai_provider.currentIndex()])
+        set_key(ENV_FILE, "AI_API_URL", self._ai_api_url.text().strip())
+        set_key(ENV_FILE, "AI_API_KEY", self._ai_api_key.text().strip())
+        set_key(ENV_FILE, "AI_MODEL", self._ai_model.currentText().strip())
 
         # Reload env
         load_dotenv(ENV_FILE, override=True)
@@ -2191,13 +2328,23 @@ class TranslatorWindow(QMainWindow):
 
             def call_ai():
                 try:
-                    api_key = os.getenv("OPENAI_API_KEY", "")
-                    if not api_key:
-                        result_area.setText("Chave da OpenAI nao configurada.\nVa em Config > API Keys.")
+                    # Load AI provider config
+                    ai_api_key = os.getenv("AI_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+                    ai_api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1")
+                    ai_model = os.getenv("AI_MODEL", "gpt-4o-mini")
+                    ai_provider = os.getenv("AI_PROVIDER", "openai")
+
+                    if not ai_api_key:
+                        result_area.setText("Chave de IA nao configurada.\nVa em Config > IA.")
                         return
 
                     import openai
-                    client = openai.OpenAI(api_key=api_key, timeout=30.0)
+                    # All providers use OpenAI-compatible API
+                    client = openai.OpenAI(
+                        api_key=ai_api_key,
+                        base_url=ai_api_url,
+                        timeout=30.0,
+                    )
 
                     fmt_prompts = {
                         "summary": "Faca um resumo conciso da conversa.",
@@ -2215,7 +2362,7 @@ class TranslatorWindow(QMainWindow):
                         lang_instruction = f"Responda no idioma: {self._lang_out.currentText()}."
 
                     response = client.chat.completions.create(
-                        model="gpt-4o-mini",
+                        model=ai_model,
                         messages=[
                             {"role": "system", "content": f"Voce e um assistente que resume conversas e reunioes. {lang_instruction}"},
                             {"role": "user", "content": f"{fmt_prompts[summary_fmt]}\n\nTranscricao:\n{transcript_text}"}
