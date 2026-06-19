@@ -2403,11 +2403,14 @@ class TranslatorWindow(QMainWindow):
                     )
 
                 # Always transcribe mic (for subtitle + level meter)
+                # Mic Out ON: transcribe in YOUR language (lang_out) → translate → TTS
+                # Mic Out OFF: transcribe in MEETING language (lang_in) → just subtitle
+                mic_stt_lang = lang_out["stt"] if mic_out else lang_in["stt"]
                 self._outgoing_transcriber = RealtimeTranscriber(
-                    language=lang_out["stt"],
+                    language=mic_stt_lang,
                     on_transcript=self._on_outgoing,
                     endpointing_ms=self._endpointing_ms,
-                    diarize=False,  # single speaker (you)
+                    diarize=False,
                 )
                 self._outgoing_transcriber.start()
                 time.sleep(0.5)
