@@ -1455,6 +1455,9 @@ class TranslatorWindow(QMainWindow):
         self._btn_mic_out.toggled.connect(self._on_mode_toggled_live)
         func_row.addWidget(self._btn_mic_out)
 
+        self._btn_translate = ToggleSwitch("Traducao", "#2980b9", checked=True)
+        func_row.addWidget(self._btn_translate)
+
         self._chk_save_transcription = ToggleSwitch("Salvar Transcricao", "#16a085", checked=True)
         func_row.addWidget(self._chk_save_transcription)
 
@@ -1789,15 +1792,21 @@ class TranslatorWindow(QMainWindow):
         else:
             speaker_html = ""
 
-        # Translated (bold, bright, larger)
-        self._subtitle_area.append(
-            f'{speaker_html}'
-            f'<span style="color: #fff; font-size: {self._font_size}px; font-weight: bold;">{translated}</span>'
-        )
-        # Original (smaller, dimmer, below)
-        self._subtitle_area.append(
-            f'<span style="color: #666; font-size: {max(9, self._font_size - 4)}px;">{ts}  [{src}] {original}</span>'
-        )
+        if translated != original:
+            # Translation active: bold translation + dimmer original below
+            self._subtitle_area.append(
+                f'{speaker_html}'
+                f'<span style="color: #fff; font-size: {self._font_size}px; font-weight: bold;">{translated}</span>'
+            )
+            self._subtitle_area.append(
+                f'<span style="color: #666; font-size: {max(9, self._font_size - 4)}px;">{ts}  [{src}] {original}</span>'
+            )
+        else:
+            # Translation off: just show original text
+            self._subtitle_area.append(
+                f'{speaker_html}'
+                f'<span style="color: #ddd; font-size: {self._font_size}px;">{original}</span>'
+            )
         self._subtitle_area.append("")
 
         # Auto-scroll
@@ -1844,6 +1853,7 @@ class TranslatorWindow(QMainWindow):
             "floating": self._btn_floating.isChecked(),
             "audio_in": self._btn_audio_in.isChecked(),
             "mic_out": self._btn_mic_out.isChecked(),
+            "translate": self._btn_translate.isChecked(),
             "original_vol": self._vol_original.value(),
             "tts_vol": self._vol_tts.value(),
             "tts_speed": self._speed_slider.value(),
@@ -1869,6 +1879,8 @@ class TranslatorWindow(QMainWindow):
             self._btn_audio_in.setChecked(config["audio_in"])
         if "mic_out" in config:
             self._btn_mic_out.setChecked(config["mic_out"])
+        if "translate" in config:
+            self._btn_translate.setChecked(config["translate"])
         if "original_vol" in config:
             self._vol_original.setValue(config["original_vol"])
         if "tts_vol" in config:
@@ -2529,9 +2541,13 @@ class TranslatorWindow(QMainWindow):
         """Called by SmartAccumulator when grouped text is ready."""
         speaker_tag = f"Pessoa {speaker + 1}" if speaker >= 0 else "AUDIO"
         try:
-            translated = self._translator_in.translate(text)
+            if self._btn_translate.isChecked():
+                translated = self._translator_in.translate(text)
+            else:
+                translated = ""
+
             if self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(text, translated, speaker_tag)
+                self.signals.new_subtitle.emit(text, translated or text, speaker_tag)
             if self._btn_audio_in.isChecked() and translated:
                 threading.Thread(
                     target=self._speak_in, args=(translated,), daemon=True
