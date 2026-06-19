@@ -2389,6 +2389,7 @@ class TranslatorWindow(QMainWindow):
                         self._incoming_capture.start(self._on_audio_data_subtitle_only)
 
                 # --- OUTGOING PATH ---
+                # Translator + TTS only needed for Mic Out mode
                 if mic_out:
                     self._translator_out = TextTranslator(
                         source_lang=lang_out["deepl_src"],
@@ -2401,15 +2402,17 @@ class TranslatorWindow(QMainWindow):
                         openai_voice=self._openai_voice,
                     )
 
-                    self._outgoing_transcriber = RealtimeTranscriber(
-                        language=lang_out["stt"],
-                        on_transcript=self._on_outgoing,
-                        endpointing_ms=self._endpointing_ms,
-                    )
-                    self._outgoing_transcriber.start()
-                    time.sleep(0.5)
+                # Always transcribe mic (for subtitle + level meter)
+                self._outgoing_transcriber = RealtimeTranscriber(
+                    language=lang_out["stt"],
+                    on_transcript=self._on_outgoing,
+                    endpointing_ms=self._endpointing_ms,
+                    diarize=False,  # single speaker (you)
+                )
+                self._outgoing_transcriber.start()
+                time.sleep(0.5)
 
-                # Always capture mic for level meter (+ transcription if mic_out)
+                # Always capture mic
                 self._outgoing_capture = AudioCapture.__new__(AudioCapture)
                 self._outgoing_capture.device_index = mic_dev
                 self._outgoing_capture.sample_rate = SAMPLE_RATE
@@ -2559,14 +2562,22 @@ class TranslatorWindow(QMainWindow):
         if not is_final or not text.strip():
             return
         try:
-            translated = self._translator_out.translate(text)
-            if self._btn_subtitle.isChecked():
-                self.signals.new_subtitle.emit(text, translated, "MIC")
-            virtual_mic = find_device(BLACKHOLE_16CH, kind="output")
-            if translated and virtual_mic is not None:
-                threading.Thread(
-                    target=self._speak_out, args=(translated, virtual_mic), daemon=True
-                ).start()
+            mic_out = self._btn_mic_out.isChecked()
+
+            if mic_out and self._translator_out:
+                # Mic Out active: translate and send to virtual mic
+                translated = self._translator_out.translate(text)
+                if self._btn_subtitle.isChecked():
+                    self.signals.new_subtitle.emit(text, translated, "MIC")
+                virtual_mic = find_device(BLACKHOLE_16CH, kind="output")
+                if translated and virtual_mic is not None:
+                    threading.Thread(
+                        target=self._speak_out, args=(translated, virtual_mic), daemon=True
+                    ).start()
+            else:
+                # Mic Out off: just show in subtitle (your own voice, no translation)
+                if self._btn_subtitle.isChecked():
+                    self.signals.new_subtitle.emit(text, text, "MIC")
         except Exception as e:
             self.signals.error.emit(str(e))
 
