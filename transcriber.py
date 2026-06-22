@@ -120,6 +120,7 @@ class RealtimeTranscriber:
         self._running = False
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
+        self._keepalive_thread = None
 
     def _build_connect_params(self):
         params = dict(
@@ -158,11 +159,32 @@ class RealtimeTranscriber:
             self._listen_thread = threading.Thread(target=self._listen_loop, daemon=True)
             self._listen_thread.start()
 
+            # Start keep-alive to prevent timeout
+            self._start_keepalive()
+
             self._reconnect_attempts = 0
             print(f"[Transcriber] Connected (lang={self.language}, model={self.model})")
         except Exception as e:
             print(f"[Transcriber] Connection failed: {e}")
             self._schedule_reconnect()
+
+    def _start_keepalive(self):
+        """Send keep-alive every 8 seconds to prevent Deepgram timeout."""
+        self._stop_keepalive()
+
+        def keepalive_loop():
+            while self._running and self._connection:
+                try:
+                    self._connection.send_keep_alive()
+                except Exception:
+                    break
+                time.sleep(8)
+
+        self._keepalive_thread = threading.Thread(target=keepalive_loop, daemon=True)
+        self._keepalive_thread.start()
+
+    def _stop_keepalive(self):
+        self._keepalive_thread = None  # daemon thread will stop on its own
 
     def _listen_loop(self):
         try:
@@ -178,9 +200,8 @@ class RealtimeTranscriber:
             self._schedule_reconnect()
 
     def _on_close(self):
-        """WebSocket closed — schedule reconnect."""
-        if self._running:
-            self._schedule_reconnect()
+        """WebSocket closed — listen_loop will handle reconnect."""
+        pass  # Don't reconnect here — _listen_loop handles it to avoid double reconnect
 
     def _schedule_reconnect(self):
         """Reconnect with exponential backoff."""
@@ -203,6 +224,7 @@ class RealtimeTranscriber:
 
     def _cleanup_connection(self):
         """Clean up current connection without stopping."""
+        self._stop_keepalive()
         if self._connection:
             try:
                 self._connection.send_close_stream()
