@@ -1947,7 +1947,7 @@ class TranslatorWindow(QMainWindow):
                 f'<span style="color: #fff; font-size: {self._font_size}px; font-weight: bold;">{translated}</span>'
             )
             self._subtitle_area.append(
-                f'<span style="color: #666; font-size: {max(9, self._font_size - 4)}px;">{ts}  [{src}] {original}</span>'
+                f'<span style="color: #666; font-size: {max(9, self._font_size - 2)}px;">{ts}  [{src}] {original}</span>'
             )
         else:
             # Translation off: just show original text
