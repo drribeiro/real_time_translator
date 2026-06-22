@@ -169,7 +169,10 @@ class RealtimeTranscriber:
             self._connection.start_listening()
         except Exception as e:
             if self._running:
-                print(f"[Transcriber] Listen ended: {e}")
+                err_str = str(e)
+                # Suppress noisy close frame errors
+                if "close frame" not in err_str:
+                    print(f"[Transcriber] Listen ended: {e}")
         # Connection closed — try to reconnect
         if self._running:
             self._schedule_reconnect()
@@ -292,7 +295,9 @@ class RealtimeTranscriber:
             self.on_transcript(transcript, is_final, speaker)
 
     def _on_error(self, error):
-        print(f"[Transcriber] Error: {error}")
+        err_str = str(error)
+        if "close frame" not in err_str:
+            print(f"[Transcriber] Error: {error}")
 
     def send(self, audio_bytes: bytes):
         """Send raw PCM audio bytes to Deepgram. Silently drops on error."""

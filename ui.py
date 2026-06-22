@@ -66,7 +66,7 @@ class AudioLevelMeter(QWidget):
         label_w = 0
         if self._label:
             p.setPen(QPen(QColor("#888")))
-            p.setFont(QFont("SF Pro", 9))
+            p.setFont(QFont("Helvetica Neue", 9))
             label_w = p.fontMetrics().horizontalAdvance(self._label) + 6
             p.drawText(0, h // 2 + 4, self._label)
 
@@ -123,7 +123,7 @@ class ToggleSwitch(QWidget):
 
     def _calc_width(self):
         if self._label:
-            font = QFont("SF Pro", 12)
+            font = QFont("Helvetica Neue", 12)
             font.setBold(True)
             from PyQt6.QtGui import QFontMetrics
             fm = QFontMetrics(font)
@@ -198,7 +198,7 @@ class ToggleSwitch(QWidget):
                 p.setPen(QPen(QColor("#ccc")))
             else:
                 p.setPen(QPen(QColor("#555")))
-            font = QFont("SF Pro", 12)
+            font = QFont("Helvetica Neue", 12)
             font.setBold(True)
             p.setFont(font)
             p.drawText(54, 18, self._label)
@@ -1068,7 +1068,7 @@ class FloatingSubtitle(QMainWindow):
         self._text_area.setStyleSheet(
             "QTextEdit { background: transparent; border: none; color: #fff; }"
         )
-        self._text_area.setFont(QFont("SF Pro", 14))
+        self._text_area.setFont(QFont("Helvetica Neue", 14))
         self._text_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._text_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(self._text_area)
@@ -1723,7 +1723,7 @@ class TranslatorWindow(QMainWindow):
         self._subtitle_area = QTextEdit()
         self._subtitle_area.setReadOnly(True)
         self._subtitle_area.setObjectName("subtitleArea")
-        self._subtitle_area.setFont(QFont("SF Pro", 13))
+        self._subtitle_area.setFont(QFont("Helvetica Neue", 13))
         self._subtitle_area.setMinimumHeight(150)
         layout.addWidget(self._subtitle_area)
 
@@ -2389,7 +2389,7 @@ class TranslatorWindow(QMainWindow):
     def _change_font_size(self, delta):
         self._font_size = max(9, min(30, self._font_size + delta))
         self._font_size_label.setText(str(self._font_size))
-        self._subtitle_area.setFont(QFont("SF Pro", self._font_size - 2))
+        self._subtitle_area.setFont(QFont("Helvetica Neue", self._font_size - 2))
 
     def _toggle_maximize_subtitle(self):
         """Toggle between maximized subtitle view and full UI."""
@@ -2718,6 +2718,8 @@ class TranslatorWindow(QMainWindow):
                 # Always transcribe mic (for subtitle + level meter)
                 # Mic Out ON: transcribe in YOUR language (lang_out) → translate → TTS
                 # Mic Out OFF: transcribe in MEETING language (lang_in) → just subtitle
+                # Wait before second connection to avoid rate limiting
+                time.sleep(1)
                 mic_stt_lang = lang_out["stt"] if mic_out else lang_in["stt"]
                 self._outgoing_transcriber = RealtimeTranscriber(
                     language=mic_stt_lang,
